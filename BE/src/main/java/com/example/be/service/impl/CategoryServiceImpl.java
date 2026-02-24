@@ -6,6 +6,9 @@ import com.example.be.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +20,16 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     public List<Category> getAllCategories() {
         return categoryRepository.findAll();
+    }
+
+    @Override
+    public Page<Category> getCategories(Pageable pageable) {
+        return categoryRepository.findAll(pageable);
+    }
+
+    @Override
+    public Page<Category> searchCategories(String keyword, Pageable pageable) {
+        return categoryRepository.searchCategories(keyword, pageable);
     }
 
     @Override

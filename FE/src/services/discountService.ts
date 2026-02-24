@@ -14,6 +14,9 @@ export default {
   getAllDiscounts() {
     return apiClient.get<DiscountDTO[]>('/discounts');
   },
+  searchDiscounts(params?: any) {
+    return apiClient.get('/discounts/search', { params });
+  },
   getDiscountsByProduct(productId: number) {
     return apiClient.get<DiscountDTO[]>(`/discounts/product/${productId}`);
   },

@@ -7,7 +7,10 @@ export interface CategoryDTO {
 
 export default {
   getAllCategories() {
-    return apiClient.get<CategoryDTO[]>('/categories');
+    return apiClient.get<CategoryDTO[]>('/categories/all');
+  },
+  getCategories(params?: any) {
+    return apiClient.get('/categories', { params });
   },
   getCategoryById(id: number) {
     return apiClient.get<CategoryDTO>(`/categories/${id}`);

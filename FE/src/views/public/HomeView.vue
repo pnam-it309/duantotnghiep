@@ -48,7 +48,7 @@ const navigateToShop = () => {
 
 <style scoped>
 .hero {
-    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, #7c3aed 100%);
     color: white;
     padding: 4rem 0;
 }
@@ -78,7 +78,7 @@ const navigateToShop = () => {
 
 .btn-primary {
     background: white;
-    color: #4f46e5;
+    color: var(--color-primary);
     border: none;
     padding: 0.8rem 2rem;
     font-size: 1.1rem;

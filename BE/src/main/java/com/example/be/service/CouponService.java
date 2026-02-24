@@ -1,17 +1,24 @@
 package com.example.be.service;
 
-import com.example.be.entity.Coupon;
-import java.util.List;
-import java.util.Optional;
+import com.example.be.dto.CouponDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import java.math.BigDecimal;
 
 public interface CouponService {
-    List<Coupon> getAllCoupons();
+    CouponDTO createCoupon(CouponDTO couponDTO);
 
-    Optional<Coupon> getCouponById(Long id);
+    CouponDTO getCouponById(Long id);
 
-    Optional<Coupon> getCouponByCode(String code);
+    void deleteCoupon(Long id); // Added
 
-    Coupon saveCoupon(Coupon coupon);
+    CouponDTO validateCoupon(String code, BigDecimal orderValue);
 
-    void deleteCoupon(Long id);
+    BigDecimal calculateDiscount(String code, BigDecimal orderValue);
+
+    void useCoupon(String code);
+
+    Page<CouponDTO> getCoupons(Pageable pageable);
+
+    Page<CouponDTO> searchCoupons(String keyword, Boolean isActive, Pageable pageable);
 }

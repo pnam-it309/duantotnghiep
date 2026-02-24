@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import discountService, { type DiscountDTO } from '../../services/discountService';
 import productService, { type ProductDTO } from '../../services/productService';
 import importService from '../../services/importService';
+import Pagination from '../../components/Pagination.vue';
 
 const discounts = ref<DiscountDTO[]>([]);
 const products = ref<ProductDTO[]>([]);
@@ -12,24 +13,13 @@ const editingDiscount = ref<DiscountDTO | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 // Filters
+// Search & Pagination
 const searchQuery = ref('');
 const activeFilter = ref('all');
-
-const filteredDiscounts = computed(() => {
-    return discounts.value.filter(discount => {
-        const query = searchQuery.value.toLowerCase();
-        const productName = discount.productName ? discount.productName.toLowerCase() : '';
-        const matchesSearch = !query ||
-            productName.includes(query) ||
-            discount.id.toString().includes(query);
-
-        const matchesStatus = activeFilter.value === 'all' ||
-            (activeFilter.value === 'active' && discount.active) ||
-            (activeFilter.value === 'inactive' && !discount.active);
-
-        return matchesSearch && matchesStatus;
-    });
-});
+const currentPage = ref(0);
+const pageSize = ref(5);
+const totalPages = ref(0);
+const totalElements = ref(0);
 
 const formData = ref({
     productId: 0,
@@ -42,17 +32,35 @@ const formData = ref({
 const loadData = async () => {
     isLoading.value = true;
     try {
+        const params = {
+            page: currentPage.value,
+            size: pageSize.value,
+            keyword: searchQuery.value || undefined,
+            active: activeFilter.value === 'all' ? undefined : (activeFilter.value === 'active')
+        };
         const [discountsRes, productsRes] = await Promise.all([
-            discountService.getAllDiscounts(),
+            discountService.searchDiscounts(params),
             productService.getAllProducts()
         ]);
-        discounts.value = discountsRes.data;
-        products.value = productsRes.data;
+        discounts.value = discountsRes.data.content;
+        totalPages.value = discountsRes.data.totalPages;
+        totalElements.value = discountsRes.data.totalElements;
+        products.value = Array.isArray(productsRes.data) ? productsRes.data : (productsRes.data as any).content;
     } catch (error) {
         console.error('Error loading discounts:', error);
     } finally {
         isLoading.value = false;
     }
+};
+
+watch([searchQuery, activeFilter], () => {
+    currentPage.value = 0;
+    loadData();
+});
+
+const handlePageChange = (page: number) => {
+    currentPage.value = page;
+    loadData();
 };
 
 const triggerFileInput = () => {
@@ -83,8 +91,8 @@ const handleSubmit = async () => {
         const payload = {
             productId: formData.value.productId,
             discountPercent: formData.value.discountPercent,
-            startDate: formData.value.startDate ? new Date(formData.value.startDate).toISOString() : new Date().toISOString(),
-            endDate: formData.value.endDate ? new Date(formData.value.endDate).toISOString() : new Date().toISOString(),
+            startDate: formData.value.startDate,
+            endDate: formData.value.endDate,
             active: formData.value.active
         };
 
@@ -103,7 +111,7 @@ const handleSubmit = async () => {
 };
 
 const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this discount?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa giảm giá này?')) return;
 
     try {
         await discountService.deleteDiscount(id);
@@ -155,101 +163,134 @@ onMounted(() => {
 
 <template>
     <div class="discount-view">
-        <div class="header">
-            <h2>Discounts</h2>
-            <div class="actions">
-                <input type="text" v-model="searchQuery" placeholder="Search product..." class="search-input" />
+        <div class="page-header">
+            <div class="page-title">
+                <h2>Giảm giá</h2>
+            </div>
+            <button class="btn btn-primary btn-add" @click="openForm()">
+                <i class="pi pi-plus"></i>
+                <span>Thêm giảm giá</span>
+            </button>
+        </div>
 
-                <select v-model="activeFilter" class="filter-select">
-                    <option value="all">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
+        <div class="action-bar card">
+            <div class="filter-group">
+                <div class="search-wrapper">
+                    <i class="pi pi-search search-icon"></i>
+                    <input type="text" v-model="searchQuery" placeholder="Tìm sản phẩm..." class="search-input" />
+                </div>
 
-                <input type="file" ref="fileInput" @change="handleFileUpload" style="display: none"
-                    accept=".xlsx, .xls" />
-                <button class="btn btn-secondary" @click="importService.downloadTemplate('discounts')"
-                    style="margin-right: 0.5rem">Download Template</button>
-                <button class="btn btn-secondary" @click="triggerFileInput" style="margin-right: 0.5rem">Import
-                    Excel</button>
-                <button class="btn btn-primary" @click="openForm()">Add Discount</button>
+                <div class="select-group">
+                    <div class="select-wrapper">
+                        <select v-model="activeFilter" class="filter-select">
+                            <option value="all">Tất cả trạng thái</option>
+                            <option value="active">Đang hoạt động</option>
+                            <option value="inactive">Tạm ngưng</option>
+                        </select>
+                        <i class="pi pi-chevron-down select-icon"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <div class="import-export">
+                    <input type="file" ref="fileInput" @change="handleFileUpload" style="display: none" accept=".xlsx, .xls" />
+                    <button class="btn btn-outline" @click="triggerFileInput" title="Nhập Excel">
+                        <i class="pi pi-file-import"></i>
+                        <span>Nhập Excel</span>
+                    </button>
+                </div>
+                <button class="btn btn-outline" @click="importService.downloadTemplate('discounts')" title="Tải mẫu">
+                    <i class="pi pi-download"></i>
+                    <span>Tải mẫu</span>
+                </button>
             </div>
         </div>
 
-        <div v-if="isLoading" class="loading">Loading...</div>
+        <div v-if="isLoading" class="loading">Đang tải...</div>
 
         <div v-else class="card table-container">
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Product</th>
-                        <th>Percent</th>
-                        <th>Start</th>
-                        <th>End</th>
-                        <th>Active</th>
-                        <th>Actions</th>
+                        <th>Sản phẩm</th>
+                        <th>Phần trăm</th>
+                        <th>Bắt đầu</th>
+                        <th>Kết thúc</th>
+                        <th>Trạng thái</th>
+                        <th>Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="discount in filteredDiscounts" :key="discount.id">
+                    <tr v-for="discount in discounts" :key="discount.id">
                         <td>{{ discount.id }}</td>
-                        <td>{{ discount.productName || discount.productId }}</td>
-                        <td>{{ discount.discountPercent }}%</td>
+                        <td><strong>{{ discount.productName || discount.productId }}</strong></td>
+                        <td>
+                          <span class="badge badge-danger">-{{ discount.discountPercent }}%</span>
+                        </td>
                         <td>{{ new Date(discount.startDate).toLocaleDateString() }}</td>
                         <td>{{ new Date(discount.endDate).toLocaleDateString() }}</td>
                         <td>
-                            <span :class="{ 'badge-success': discount.active, 'badge-warning': !discount.active }">
-                                {{ discount.active ? 'Yes' : 'No' }}
+                            <span class="badge" :class="{ 'badge-success': discount.active, 'badge-warning': !discount.active }">
+                                {{ discount.active ? 'Hoạt động' : 'Tạm ngưng' }}
                             </span>
                         </td>
                         <td>
-                            <button class="btn-text" @click="openForm(discount)">Edit</button>
-                            <button class="btn-text text-danger" @click="handleDelete(discount.id)">Delete</button>
+                            <button class="btn-text" @click="openForm(discount)">Sửa</button>
+                            <button class="btn-text text-danger" @click="handleDelete(discount.id)">Xóa</button>
                         </td>
                     </tr>
-                    <tr v-if="filteredDiscounts.length === 0">
-                        <td colspan="7" class="text-center">No discounts found.</td>
+                    <tr v-if="discounts.length === 0">
+                        <td colspan="7" class="text-center">Không tìm thấy giảm giá nào.</td>
                     </tr>
                 </tbody>
             </table>
+
+            <Pagination 
+                :current-page="currentPage" 
+                :total-pages="totalPages" 
+                :total-elements="totalElements"
+                :page-size="pageSize"
+                @page-change="handlePageChange"
+            />
         </div>
 
         <!-- Modal -->
         <div v-if="showForm" class="modal-overlay">
             <div class="modal card">
-                <h3>{{ editingDiscount ? 'Edit Discount' : 'Add Discount' }}</h3>
+                <h3>{{ editingDiscount ? 'Chỉnh sửa' : 'Thêm mới' }}</h3>
                 <form @submit.prevent="handleSubmit" class="form">
                     <div class="form-group">
-                        <label for="productId">Product</label>
+                        <label for="productId">Sản phẩm áp dụng</label>
                         <select id="productId" v-model="formData.productId" required>
                             <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }}</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="discountPercent">Discount Percent %</label>
+                        <label for="discountPercent">Phần trăm giảm (%)</label>
                         <input id="discountPercent" v-model="formData.discountPercent" type="number" step="0.1"
                             required />
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="startDate">Start Date</label>
+                            <label for="startDate">Ngày bắt đầu</label>
                             <input id="startDate" v-model="formData.startDate" type="datetime-local" required />
                         </div>
                         <div class="form-group">
-                            <label for="endDate">End Date</label>
+                            <label for="endDate">Ngày kết thúc</label>
                             <input id="endDate" v-model="formData.endDate" type="datetime-local" required />
                         </div>
                     </div>
                     <div class="form-group checkbox">
                         <label>
                             <input type="checkbox" v-model="formData.active" />
-                            Active
+                            Kích hoạt chương trình
                         </label>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn" @click="closeForm">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                        <button type="button" class="btn" @click="closeForm">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Lưu</button>
                     </div>
                 </form>
             </div>
@@ -258,40 +299,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-
-.actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.search-input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    margin-right: 0.5rem;
-    min-width: 200px;
-}
-
-.filter-select {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    margin-right: 0.5rem;
-}
-
 .loading {
     text-align: center;
-    padding: 2rem;
+    padding: 3rem;
     color: var(--color-text-muted);
 }
 
@@ -303,7 +313,9 @@ onMounted(() => {
     background: none;
     border: none;
     color: var(--color-primary);
+    font-weight: 500;
     padding: 0 0.5rem;
+    font-size: 0.875rem;
 }
 
 .btn-text:hover {
@@ -320,7 +332,8 @@ onMounted(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -330,13 +343,19 @@ onMounted(() => {
 .modal {
     width: 100%;
     max-width: 500px;
+    animation: modal-in 0.3s ease-out;
+}
+
+@keyframes modal-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .form {
-    margin-top: 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.25rem;
+    margin-top: 1.5rem;
 }
 
 .form-group {
@@ -351,17 +370,37 @@ onMounted(() => {
     gap: 1rem;
 }
 
-input,
-select {
-    padding: 0.625rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+input, select {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  transition: all 0.2s;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
 }
 
 .checkbox {
     flex-direction: row;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.75rem;
+}
+
+.checkbox input {
+    width: 18px;
+    height: 18px;
 }
 
 .form-actions {
@@ -371,13 +410,20 @@ select {
     margin-top: 1rem;
 }
 
-.badge-success {
-    color: var(--color-secondary);
-    font-weight: 600;
+/* Table Enhancements */
+.table-container {
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
 }
 
-.badge-warning {
-    color: var(--color-warning);
-    font-weight: 600;
+table th {
+    background-color: #f9fafb;
+    padding: 1rem;
+}
+
+table td {
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--color-text-main);
 }
 </style>

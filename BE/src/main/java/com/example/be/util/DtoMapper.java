@@ -86,7 +86,7 @@ public class DtoMapper {
             return null;
         UserDTO dto = new UserDTO();
         BeanUtils.copyProperties(user, dto);
-        // Password intentionally skipped
+        dto.setPassword(null); // Ensure password is never returned
         return dto;
     }
 
@@ -106,6 +106,9 @@ public class DtoMapper {
             return null;
         CouponDTO dto = new CouponDTO();
         BeanUtils.copyProperties(coupon, dto);
+        if (coupon.getDiscountType() != null) {
+            dto.setDiscountType(coupon.getDiscountType().name());
+        }
         return dto;
     }
 
@@ -114,6 +117,9 @@ public class DtoMapper {
             return null;
         Coupon coupon = new Coupon();
         BeanUtils.copyProperties(dto, coupon);
+        if (dto.getDiscountType() != null) {
+            coupon.setDiscountType(Coupon.DiscountType.valueOf(dto.getDiscountType()));
+        }
         return coupon;
     }
 
@@ -328,5 +334,56 @@ public class DtoMapper {
             dto.setOrderId(request.getOrder().getId());
         }
         return dto;
+    }
+
+    // --- Review ---
+    public ReviewDTO toReviewDTO(Review review) {
+        if (review == null)
+            return null;
+        ReviewDTO dto = new ReviewDTO();
+        BeanUtils.copyProperties(review, dto);
+        if (review.getProduct() != null) {
+            dto.setProductId(review.getProduct().getId());
+        }
+        if (review.getUser() != null) {
+            dto.setUserId(review.getUser().getId());
+            dto.setUsername(review.getUser().getUsername());
+        }
+        dto.setImageUrls(review.getImageUrls());
+        dto.setIsVerifiedPurchase(review.getIsVerifiedPurchase());
+        return dto;
+    }
+
+    public Review toReviewEntity(ReviewDTO dto) {
+        if (dto == null)
+            return null;
+        Review review = new Review();
+        BeanUtils.copyProperties(dto, review);
+        if (dto.getImageUrls() != null) {
+            review.setImageUrls(dto.getImageUrls());
+        }
+        // Relationships set in service
+        return review;
+    }
+
+    // --- User Address ---
+    public UserAddressDTO toUserAddressDTO(UserAddress address) {
+        if (address == null)
+            return null;
+        UserAddressDTO dto = new UserAddressDTO();
+        BeanUtils.copyProperties(address, dto);
+        if (address.getUser() != null) {
+            dto.setUserId(address.getUser().getId());
+        }
+        return dto;
+    }
+
+    public UserAddress toUserAddressEntity(UserAddressDTO dto) {
+        if (dto == null)
+            return null;
+        UserAddress address = new UserAddress();
+        BeanUtils.copyProperties(dto, address);
+        // User relationship set in service
+        return address;
     }
 }

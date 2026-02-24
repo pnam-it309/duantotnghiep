@@ -1,23 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import supplierService, { type SupplierDTO } from '../../services/supplierService';
+import Pagination from '../../components/Pagination.vue';
 
 const suppliers = ref<SupplierDTO[]>([]);
 const isLoading = ref(false);
 const showForm = ref(false);
 const editingSupplier = ref<SupplierDTO | null>(null);
 
+// Search & Pagination
 const searchQuery = ref('');
-
-const filteredSuppliers = computed(() => {
-    if (!searchQuery.value) return suppliers.value;
-    const query = searchQuery.value.toLowerCase();
-    return suppliers.value.filter(s =>
-        s.name.toLowerCase().includes(query) ||
-        (s.phoneNumber && s.phoneNumber.includes(query)) ||
-        s.id.toString().includes(query)
-    );
-});
+const currentPage = ref(0);
+const pageSize = ref(5);
+const totalPages = ref(0);
+const totalElements = ref(0);
 
 const formData = ref({
     name: '',
@@ -29,13 +25,30 @@ const formData = ref({
 const fetchSuppliers = async () => {
     isLoading.value = true;
     try {
-        const res = await supplierService.getAllSuppliers();
-        suppliers.value = res.data;
+        const params = {
+            page: currentPage.value,
+            size: pageSize.value,
+            keyword: searchQuery.value || undefined
+        };
+        const response = await supplierService.getSuppliers(params);
+        suppliers.value = response.data.content;
+        totalPages.value = response.data.totalPages;
+        totalElements.value = response.data.totalElements;
     } catch (error) {
         console.error('Error fetching suppliers:', error);
     } finally {
         isLoading.value = false;
     }
+};
+
+watch(searchQuery, () => {
+    currentPage.value = 0;
+    fetchSuppliers();
+});
+
+const handlePageChange = (page: number) => {
+    currentPage.value = page;
+    fetchSuppliers();
 };
 
 const openForm = (supplier?: SupplierDTO) => {
@@ -61,10 +74,15 @@ const closeForm = () => {
 
 const handleSubmit = async () => {
     try {
+        const payload = {
+            ...formData.value,
+            phoneNumber: formData.value.phoneNumber || undefined,
+            email: formData.value.email || undefined
+        };
         if (editingSupplier.value) {
-            await supplierService.updateSupplier(editingSupplier.value.id, formData.value);
+            await supplierService.updateSupplier(editingSupplier.value.id, payload);
         } else {
-            await supplierService.createSupplier(formData.value);
+            await supplierService.createSupplier(payload);
         }
         await fetchSuppliers();
         closeForm();
@@ -74,7 +92,7 @@ const handleSubmit = async () => {
 };
 
 const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this supplier?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa nhà cung cấp này?')) return;
     try {
         await supplierService.deleteSupplier(id);
         await fetchSuppliers();
@@ -90,64 +108,83 @@ onMounted(() => {
 
 <template>
     <div class="supplier-view">
-        <div class="header">
-            <h2>Suppliers</h2>
-            <div class="actions">
-                <input type="text" v-model="searchQuery" placeholder="Search supplier..." class="search-input" />
-                <button class="btn btn-primary" @click="openForm()">Add Supplier</button>
+        <div class="page-header">
+            <div class="page-title">
+                <h2>Nhà cung cấp</h2>
+            </div>
+            <button class="btn btn-primary btn-add" @click="openForm()">
+                <i class="pi pi-plus"></i>
+                <span>Thêm nhà cung cấp</span>
+            </button>
+        </div>
+
+        <div class="action-bar card">
+            <div class="filter-group">
+                <div class="search-wrapper">
+                    <i class="pi pi-search search-icon"></i>
+                    <input type="text" v-model="searchQuery" placeholder="Tìm tên, số điện thoại, email..." class="search-input" />
+                </div>
             </div>
         </div>
 
-        <div v-if="isLoading" class="loading">Loading...</div>
+        <div v-if="isLoading" class="loading">Đang tải...</div>
 
         <div v-else class="card table-container">
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Name</th>
-                        <th>Phone</th>
+                        <th>Tên</th>
+                        <th>Số điện thoại</th>
                         <th>Email</th>
-                        <th>Address</th>
-                        <th>Active</th>
-                        <th>Actions</th>
+                        <th>Địa chỉ</th>
+                        <th>Hoạt động</th>
+                        <th>Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="supplier in filteredSuppliers" :key="supplier.id">
+                    <tr v-for="supplier in suppliers" :key="supplier.id">
                         <td>{{ supplier.id }}</td>
                         <td>{{ supplier.name }}</td>
                         <td>{{ supplier.phoneNumber }}</td>
                         <td>{{ supplier.email }}</td>
                         <td>{{ supplier.address }}</td>
                         <td>
-                            <span :class="{ 'badge-success': supplier.active, 'badge-warning': !supplier.active }">
-                                {{ supplier.active ? 'Yes' : 'No' }}
-                            </span>
-                        </td>
-                        <td>
-                            <button class="btn-text" @click="openForm(supplier)">Edit</button>
-                            <button class="btn-text text-danger" @click="handleDelete(supplier.id)">Delete</button>
-                        </td>
-                    </tr>
-                    <tr v-if="filteredSuppliers.length === 0">
-                        <td colspan="7" class="text-center">No suppliers found.</td>
-                    </tr>
+                             <span class="badge" :class="{ 'badge-success': supplier.active, 'badge-warning': !supplier.active }">
+                                 {{ supplier.active ? 'Có' : 'Không' }}
+                             </span>
+                         </td>
+                         <td>
+                             <button class="btn-text" @click="openForm(supplier)">Sửa</button>
+                             <button class="btn-text text-danger" @click="handleDelete(supplier.id)">Xóa</button>
+                         </td>
+                     </tr>
+                     <tr v-if="suppliers.length === 0">
+                         <td colspan="7" class="text-center">Không tìm thấy nhà cung cấp nào.</td>
+                     </tr>
                 </tbody>
             </table>
+
+            <Pagination 
+                :current-page="currentPage" 
+                :total-pages="totalPages" 
+                :total-elements="totalElements"
+                :page-size="pageSize"
+                @page-change="handlePageChange"
+            />
         </div>
 
         <!-- Modal -->
         <div v-if="showForm" class="modal-overlay">
             <div class="modal card">
-                <h3>{{ editingSupplier ? 'Edit Supplier' : 'Add Supplier' }}</h3>
+                <h3>{{ editingSupplier ? 'Chỉnh sửa' : 'Thêm mới' }}</h3>
                 <form @submit.prevent="handleSubmit" class="form">
                     <div class="form-group">
-                        <label>Name</label>
+                        <label>Tên nhà cung cấp</label>
                         <input v-model="formData.name" type="text" required />
                     </div>
                     <div class="form-group">
-                        <label>Phone Number</label>
+                        <label>Số điện thoại</label>
                         <input v-model="formData.phoneNumber" type="text" />
                     </div>
                     <div class="form-group">
@@ -155,12 +192,12 @@ onMounted(() => {
                         <input v-model="formData.email" type="email" />
                     </div>
                     <div class="form-group">
-                        <label>Address</label>
+                        <label>Địa chỉ</label>
                         <input v-model="formData.address" type="text" />
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn" @click="closeForm">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                        <button type="button" class="btn" @click="closeForm">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Lưu</button>
                     </div>
                 </form>
             </div>
@@ -169,91 +206,23 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-
-.actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.search-input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    min-width: 200px;
-}
-
 .loading {
     text-align: center;
-    padding: 2rem;
+    padding: 3rem;
     color: var(--color-text-muted);
 }
 
-.card {
-    background-color: var(--color-surface);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    padding: 1.5rem;
-    border: 1px solid var(--border-color);
-}
-
-.table-container {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th,
-td {
-    padding: 1rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-}
-
-th {
-    font-weight: 600;
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.btn {
-    padding: 0.625rem 1.25rem;
-    border-radius: var(--radius-md);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: none;
-    font-size: 0.9rem;
-}
-
-.btn-primary {
-    background-color: var(--color-primary);
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: var(--color-primary-dark);
+.text-center {
+    text-align: center;
 }
 
 .btn-text {
     background: none;
     border: none;
     color: var(--color-primary);
+    font-weight: 500;
     padding: 0 0.5rem;
+    font-size: 0.875rem;
 }
 
 .btn-text:hover {
@@ -264,28 +233,6 @@ th {
     color: var(--color-danger);
 }
 
-.text-center {
-    text-align: center;
-}
-
-.badge-success {
-    background-color: #dcfce7;
-    color: #166534;
-    padding: 0.25rem 0.5rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.badge-warning {
-    background-color: #fef9c3;
-    color: #854d0e;
-    padding: 0.25rem 0.5rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
 /* Modal */
 .modal-overlay {
     position: fixed;
@@ -293,7 +240,8 @@ th {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -303,13 +251,19 @@ th {
 .modal {
     width: 100%;
     max-width: 500px;
+    animation: modal-in 0.3s ease-out;
+}
+
+@keyframes modal-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .form {
-    margin-top: 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.25rem;
+    margin-top: 1.5rem;
 }
 
 .form-group {
@@ -318,10 +272,26 @@ th {
     gap: 0.5rem;
 }
 
+label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
 input {
-    padding: 0.625rem;
+    padding: 0.625rem 0.875rem;
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    transition: all 0.2s;
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
 }
 
 .form-actions {
@@ -329,5 +299,22 @@ input {
     justify-content: flex-end;
     gap: 0.75rem;
     margin-top: 1rem;
+}
+
+/* Table Enhancements */
+.table-container {
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+table th {
+    background-color: #f9fafb;
+    padding: 1rem;
+}
+
+table td {
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--color-text-main);
 }
 </style>

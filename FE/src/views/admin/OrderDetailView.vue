@@ -39,7 +39,7 @@ const handleShipOrder = async () => {
         showShipModal.value = false;
         await loadData(); // Reload to see updates
     } catch (e) {
-        alert('Failed to ship order');
+        alert('Lỗi khi cập nhật trạng thái giao hàng');
     }
 };
 
@@ -48,9 +48,9 @@ const handleReturnRequest = async () => {
     try {
         await returnService.createRequest(order.value.id, returnReason.value);
         showReturnModal.value = false;
-        alert('Return request created!');
+        alert('Đã tạo yêu cầu trả hàng!');
     } catch (e) {
-        alert('Failed to create return request');
+        alert('Lỗi khi tạo yêu cầu trả hàng');
     }
 };
 
@@ -64,58 +64,115 @@ onMounted(loadData);
 
 <template>
     <div class="order-detail-view" v-if="order">
-        <div class="header">
-            <button @click="router.back()" class="btn btn-outline">&larr; Back</button>
-            <h2>Order #{{ order.id }}</h2>
-            <span class="status-badge" :class="order.status">{{ order.status }}</span>
+        <div class="page-header">
+            <div class="page-title">
+                <div class="back-nav">
+                    <button @click="router.back()" class="btn-icon-link">
+                        <i class="pi pi-arrow-left"></i>
+                        <span>Quay lại</span>
+                    </button>
+                </div>
+                <h2>Chi tiết đơn hàng #{{ order.id }}</h2>
+            </div>
+            <div class="header-actions">
+                <span class="badge" :class="order.status">{{ order.status }}</span>
+                <a :href="`${import.meta.env.VITE_API_BASE_URL || '/api'}/export/orders/pdf?orderId=${order.id}`" 
+                   class="btn btn-outline" target="_blank">
+                    <i class="pi pi-file-pdf"></i>
+                    <span>Tải Hóa đơn</span>
+                </a>
+            </div>
         </div>
 
         <div class="content-grid">
             <!-- Left: Info & Items -->
-            <div class="main-info">
-                <div class="card mb-4">
-                    <h3>Customer Info</h3>
-                    <p><strong>User ID:</strong> {{ order.userId }}</p>
-                    <p><strong>Username:</strong> {{ order.username }}</p>
-                    <p><strong>Created At:</strong> {{ formatDate(order.createdAt) }}</p>
+            <div class="main-column">
+                <div class="info-cards">
+                    <div class="card shadow-sm">
+                        <div class="card-header-v2">
+                            <i class="pi pi-user"></i>
+                            <h3>Khách hàng</h3>
+                        </div>
+                        <div class="card-body-v2">
+                            <div class="info-row">
+                                <span>Tên tài khoản:</span>
+                                <strong>{{ order.username }}</strong>
+                            </div>
+                            <div class="info-row">
+                                <span>ID khách hàng:</span>
+                                <span class="badge badge-outline">#{{ order.userId }}</span>
+                            </div>
+                            <div class="info-row">
+                                <span>Ngày đặt hàng:</span>
+                                <span>{{ formatDate(order.createdAt) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card shadow-sm">
+                        <div class="card-header-v2">
+                            <i class="pi pi-truck"></i>
+                            <h3>Vận chuyển</h3>
+                        </div>
+                        <div class="card-body-v2">
+                            <div v-if="order.trackingCode">
+                                <div class="info-row">
+                                    <span>Đơn vị:</span>
+                                    <strong>{{ order.carrierName }}</strong>
+                                </div>
+                                <div class="info-row">
+                                    <span>Mã vận đơn:</span>
+                                    <span class="tracking-code">{{ order.trackingCode }}</span>
+                                </div>
+                            </div>
+                            <div v-else class="empty-state-sm">
+                                <i class="pi pi-info-circle"></i>
+                                <span>Chờ xử lý giao hàng</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="card mb-4">
-                    <h3>Shipping Info</h3>
-                    <div v-if="order.trackingCode">
-                        <p><strong>Carrier:</strong> {{ order.carrierName }}</p>
-                        <p><strong>Tracking Code:</strong> <span class="highlight">{{ order.trackingCode }}</span></p>
+                <div class="card table-card shadow-sm mt-6">
+                    <div class="card-header-v2">
+                        <i class="pi pi-shopping-bag"></i>
+                        <h3>Sản phẩm đã mua</h3>
                     </div>
-                    <div v-else>
-                        <p class="text-muted">Not shipped yet.</p>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h3>Items</h3>
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Product</th>
+                                <th>Sản phẩm</th>
                                 <th>Sku</th>
-                                <th>Price</th>
-                                <th>Qty</th>
-                                <th>Total</th>
+                                <th class="text-right">Giá</th>
+                                <th class="text-center">Số lượng</th>
+                                <th class="text-right">Thành tiền</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="item in order.items" :key="item.id">
-                                <td>{{ item.productName }}</td>
-                                <td>{{ item.variantSku }}</td>
-                                <td>${{ item.price }}</td>
-                                <td>{{ item.quantity }}</td>
-                                <td>${{ item.price * item.quantity }}</td>
+                                <td>
+                                    <div class="product-cell">
+                                        <strong>{{ item.productName }}</strong>
+                                    </div>
+                                </td>
+                                <td><span class="sku-badge">{{ item.variantSku }}</span></td>
+                                <td class="text-right">{{ item.price.toLocaleString() }}đ</td>
+                                <td class="text-center">{{ item.quantity }}</td>
+                                <td class="text-right"><strong>{{ (item.price * item.quantity).toLocaleString() }}đ</strong></td>
                             </tr>
                         </tbody>
                         <tfoot>
-                            <tr>
-                                <td colspan="4" class="text-right"><strong>Total:</strong></td>
-                                <td><strong>${{ order.finalTotal }}</strong></td>
+                            <tr class="summary-row">
+                                <td colspan="4" class="text-right">Tạm tính:</td>
+                                <td class="text-right">{{ (order.finalTotal + (order.discountTotal || 0)).toLocaleString() }}đ</td>
+                            </tr>
+                            <tr class="summary-row promo" v-if="order.discountTotal">
+                                <td colspan="4" class="text-right">Giảm giá:</td>
+                                <td class="text-right">-{{ order.discountTotal.toLocaleString() }}đ</td>
+                            </tr>
+                            <tr class="summary-row total">
+                                <td colspan="4" class="text-right">TỔNG CỘNG:</td>
+                                <td class="text-right price-highlight">{{ order.finalTotal.toLocaleString() }}đ</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -123,31 +180,41 @@ onMounted(loadData);
             </div>
 
             <!-- Right: Timeline & Actions -->
-            <div class="sidebar">
-                <div class="card actions-card mb-4">
-                    <h3>Actions</h3>
-                    <div class="action-buttons">
+            <div class="side-column">
+                <div class="card actions-card shadow-sm mb-6">
+                    <h3>Xử lý đơn hàng</h3>
+                    <div class="action-list mt-4">
                         <button
                             v-if="order.status !== 'SHIPPING' && order.status !== 'DELIVERED' && order.status !== 'CANCELLED'"
-                            @click="showShipModal = true" class="btn btn-primary full-width">
-                            Ship Order
+                            @click="showShipModal = true" class="btn btn-primary btn-block">
+                            <i class="pi pi-send"></i>
+                            <span>Giao hàng ngay</span>
                         </button>
 
                         <button v-if="order.status === 'DELIVERED'" @click="showReturnModal = true"
-                            class="btn btn-warning full-width">
-                            Request Return
+                            class="btn btn-warning btn-block">
+                            <i class="pi pi-refresh"></i>
+                            <span>Yêu cầu trả hàng</span>
+                        </button>
+                        
+                        <button v-if="order.status === 'PENDING'" class="btn btn-outline-danger btn-block">
+                           <i class="pi pi-times"></i>
+                           <span>Hủy đơn hàng</span>
                         </button>
                     </div>
                 </div>
 
-                <div class="card timeline-card">
-                    <h3>Order Timeline</h3>
-                    <div class="timeline">
+                <div class="card timeline-card shadow-sm">
+                    <h3>Lịch sử thay đổi</h3>
+                    <div class="timeline mt-4">
                         <div v-for="h in history" :key="h.id" class="timeline-item">
-                            <div class="time">{{ formatDate(h.changedAt) }}</div>
-                            <div class="content">
-                                <div class="status">{{ h.status }}</div>
-                                <div class="note">{{ h.note }}</div>
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <div class="timeline-header">
+                                    <span class="timeline-status">{{ h.status }}</span>
+                                    <span class="timeline-time">{{ formatDate(h.changedAt) }}</span>
+                                </div>
+                                <div class="timeline-note" v-if="h.note">{{ h.note }}</div>
                             </div>
                         </div>
                     </div>
@@ -157,32 +224,42 @@ onMounted(loadData);
 
         <!-- Modals -->
         <div v-if="showShipModal" class="modal-overlay">
-            <div class="modal">
-                <h3>Ship Order</h3>
-                <div class="form-group">
-                    <label>Select Carrier</label>
-                    <select v-model="selectedCarrier">
-                        <option value="GHN">Giao Hàng Nhanh (GHN)</option>
-                        <option value="VTP">Viettel Post</option>
-                    </select>
+            <div class="modal card">
+                <div class="modal-header">
+                    <h3>Xác nhận giao hàng</h3>
+                    <p>Vui lòng chọn đơn vị vận chuyển để tiếp tục</p>
                 </div>
-                <div class="modal-actions">
-                    <button @click="showShipModal = false" class="btn btn-outline">Cancel</button>
-                    <button @click="handleShipOrder" class="btn btn-primary">Confirm Shipping</button>
+                <div class="form-group mt-4">
+                    <label>Đối tác vận chuyển</label>
+                    <div class="select-wrapper">
+                        <select v-model="selectedCarrier" class="form-control">
+                            <option value="GHN">Giao Hàng Nhanh (GHN)</option>
+                            <option value="VTP">Viettel Post</option>
+                            <option value="J&T">J&T Express</option>
+                        </select>
+                        <i class="pi pi-chevron-down select-icon"></i>
+                    </div>
+                </div>
+                <div class="form-actions mt-6">
+                    <button @click="showShipModal = false" class="btn">Hủy</button>
+                    <button @click="handleShipOrder" class="btn btn-primary">Xác nhận</button>
                 </div>
             </div>
         </div>
 
         <div v-if="showReturnModal" class="modal-overlay">
-            <div class="modal">
-                <h3>Request Return</h3>
-                <div class="form-group">
-                    <label>Reason</label>
-                    <textarea v-model="returnReason" rows="3"></textarea>
+            <div class="modal card">
+                <div class="modal-header">
+                    <h3>Yêu cầu trả hàng</h3>
+                    <p>Nhập lý do khách hàng muốn trả lại sản phẩm</p>
                 </div>
-                <div class="modal-actions">
-                    <button @click="showReturnModal = false" class="btn btn-outline">Cancel</button>
-                    <button @click="handleReturnRequest" class="btn btn-warning">Submit Request</button>
+                <div class="form-group mt-4">
+                    <label>Lý do trả hàng</label>
+                    <textarea v-model="returnReason" rows="3" class="form-control" placeholder="Mô tả lý do..."></textarea>
+                </div>
+                <div class="form-actions mt-6">
+                    <button @click="showReturnModal = false" class="btn">Hủy</button>
+                    <button @click="handleReturnRequest" class="btn btn-warning">Gửi yêu cầu</button>
                 </div>
             </div>
         </div>
@@ -191,168 +268,232 @@ onMounted(loadData);
 
 <style scoped>
 .order-detail-view {
-    padding: 1rem;
+    animation: fade-in 0.4s ease-out;
 }
 
-.header {
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.back-nav {
+    margin-bottom: 0.5rem;
+}
+
+.btn-icon-link {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 2rem;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
 }
 
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: white;
-    background-color: #6c757d;
-}
-
-.status-badge.DELIVERED {
-    background-color: #28a745;
-}
-
-.status-badge.SHIPPING {
-    background-color: #17a2b8;
-}
-
-.status-badge.CANCELLED {
-    background-color: #dc3545;
-}
-
-.status-badge.PENDING {
-    background-color: #ffc107;
-    color: black;
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
 }
 
 .content-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1fr 340px;
     gap: 1.5rem;
 }
 
-.card {
-    background: var(--color-surface);
-    padding: 1.5rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
+.info-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
 }
 
-.mb-4 {
-    margin-bottom: 1.5rem;
+.card-header-v2 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border-bottom: 1px solid #f1f5f9;
 }
 
-.table {
+.card-header-v2 i {
+    color: var(--color-primary);
+    font-size: 1.125rem;
+}
+
+.card-header-v2 h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.card-body-v2 {
+    padding: 1.25rem;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+}
+
+.info-row span:first-child {
+    color: var(--color-text-muted);
+}
+
+.tracking-code {
+    font-family: monospace;
+    background: #f1f5f9;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 700;
+    color: #475569;
+}
+
+.empty-state-sm {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.table-card {
+    padding: 0;
+}
+
+.product-cell {
+    display: flex;
+    flex-direction: column;
+}
+
+.sku-badge {
+    background: #f1f5f9;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.75rem;
+}
+
+.summary-row td {
+    border: none !important;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+.summary-row.promo td {
+    color: #ef4444;
+}
+
+.summary-row.total td {
+    border-top: 1px solid #e2e8f0 !important;
+    padding-top: 1rem;
+    margin-top: 0.5rem;
+}
+
+.price-highlight {
+    font-size: 1.25rem;
+    color: var(--color-primary);
+}
+
+.btn-block {
     width: 100%;
-    border-collapse: collapse;
+    margin-bottom: 1rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
 }
 
-.table th,
-.table td {
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
+.btn-outline-danger {
+    border: 1px solid #fee2e2;
+    color: #ef4444;
+    background: white;
 }
 
-.text-right {
-    text-align: right;
+.btn-outline-danger:hover {
+    background: #fef2f2;
 }
 
-.full-width {
-    width: 100%;
-    margin-bottom: 0.5rem;
-}
-
+/* Timeline */
 .timeline {
-    border-left: 2px solid var(--border-color);
-    padding-left: 1.5rem;
-    margin-top: 1rem;
+    position: relative;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #f1f5f9;
 }
 
 .timeline-item {
     position: relative;
+    padding-left: 2rem;
     margin-bottom: 1.5rem;
 }
 
-.timeline-item::before {
-    content: '';
+.timeline-marker {
     position: absolute;
-    left: -1.9rem;
-    top: 5px;
-    width: 10px;
-    height: 10px;
-    background: var(--color-primary);
+    left: 0;
+    top: 4px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
+    background: white;
+    border: 3px solid var(--color-primary);
+    z-index: 1;
 }
 
-.time {
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.timeline-status {
+    font-weight: 700;
+    font-size: 0.875rem;
+}
+
+.timeline-time {
     font-size: 0.75rem;
     color: var(--color-text-muted);
 }
 
-.status {
-    font-weight: 600;
-}
-
-.note {
-    font-size: 0.875rem;
-}
-
-.highlight {
-    font-family: monospace;
-    background: #f8f9fa;
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-
-/* Modal */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-
-.modal {
-    background: white;
-    padding: 2rem;
-    border-radius: 8px;
-    width: 400px;
-}
-
-.modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-
-.form-group {
-    margin-bottom: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-}
-
-.form-group select,
-.form-group textarea {
-    width: 100%;
+.timeline-note {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    background: #f8fafc;
     padding: 0.5rem;
+    border-radius: 6px;
 }
 
-@media (max-width: 800px) {
-    .content-grid {
-        grid-template-columns: 1fr;
-    }
+label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.mb-6 { margin-bottom: 1.5rem; }
+.mt-6 { margin-top: 1.5rem; }
+.mt-4 { margin-top: 1rem; }
+
+@media (max-width: 1024px) {
+    .content-grid { grid-template-columns: 1fr; }
+    .info-cards { grid-template-columns: 1fr; }
 }
 </style>

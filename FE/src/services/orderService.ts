@@ -38,6 +38,9 @@ export default {
   getAllOrders() {
     return apiClient.get<OrderDTO[]>('/orders');
   },
+  searchOrders(params: any) {
+    return apiClient.get('/orders/search', { params });
+  },
   getOrdersByUser(userId: number) {
     return apiClient.get<OrderDTO[]>(`/orders/user/${userId}`);
   },

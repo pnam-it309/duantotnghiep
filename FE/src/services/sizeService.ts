@@ -7,7 +7,10 @@ export interface SizeDTO {
 
 export default {
   getAllSizes() {
-    return apiClient.get<SizeDTO[]>('/sizes');
+    return apiClient.get<SizeDTO[]>('/sizes/all');
+  },
+  getSizes(params?: any) {
+    return apiClient.get('/sizes', { params });
   },
   getSizeById(id: number) {
     return apiClient.get<SizeDTO>(`/sizes/${id}`);

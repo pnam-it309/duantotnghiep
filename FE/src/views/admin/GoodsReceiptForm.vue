@@ -42,7 +42,7 @@ const loadInitialData = async () => {
             productService.getAllProducts()
         ]);
         suppliers.value = supRes.data;
-        products.value = prodRes.data.filter(p => p.active);
+        products.value = prodRes.data.content.filter((p: ProductDTO) => p.active);
     } catch (e) {
         console.error("Error loading data", e);
     }
@@ -68,7 +68,7 @@ const handleProductChange = async () => {
 
 const addItem = () => {
     if (!currentItem.value.variantId || currentItem.value.quantity <= 0 || currentItem.value.importPrice < 0) {
-        alert("Please select valid variant, quantity and price");
+        alert("Vui lòng chọn phiên bản, số lượng và giá nhập hợp lệ");
         return;
     }
 
@@ -103,22 +103,22 @@ const removeItem = (index: number) => {
 
 const submitForm = async () => {
     if (!form.value.supplierId) {
-        alert("Please select a supplier");
+        alert("Vui lòng chọn nhà cung cấp");
         return;
     }
     if (!form.value.details || form.value.details.length === 0) {
-        alert("Please add at least one item");
+        alert("Vui lòng thêm ít nhất một sản phẩm");
         return;
     }
 
     isLoading.value = true;
     try {
         await goodsReceiptService.createReceipt(form.value as GoodsReceiptDTO);
-        alert("Import successful!");
+        alert("Nhập hàng thành công!");
         router.push('/admin/goods-receipts');
     } catch (e) {
         console.error("Error creating receipt", e);
-        alert("Failed to create receipt");
+        alert("Lỗi khi tạo phiếu nhập");
     } finally {
         isLoading.value = false;
     }
@@ -129,107 +129,132 @@ onMounted(loadInitialData);
 
 <template>
     <div class="receipt-form-view">
-        <div class="header">
-            <h2>New Goods Receipt</h2>
-            <button class="btn" @click="router.back()">Back</button>
+        <div class="page-header">
+            <div class="page-title">
+                <h2>Phiếu nhập hàng mới</h2>
+            </div>
+            <button class="btn btn-outline" @click="router.back()">
+                <i class="pi pi-arrow-left"></i>
+                <span>Quay lại</span>
+            </button>
         </div>
 
-        <div class="form-container card">
-            <!-- Master Info -->
-            <div class="form-section">
-                <h3>General Info</h3>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Supplier</label>
-                        <select v-model="form.supplierId" class="form-control">
-                            <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
-                        </select>
+        <div class="form-grid">
+            <div class="main-column">
+                <div class="card form-section shadow-glow">
+                    <div class="section-header">
+                        <i class="pi pi-plus-circle"></i>
+                        <h3>Thêm sản phẩm vào phiếu</h3>
                     </div>
-                    <div class="form-group">
-                        <label>Notes</label>
-                        <input type="text" v-model="form.notes" class="form-control" />
+                    <div class="entry-row">
+                        <div class="form-group product-select">
+                            <label>Sản phẩm</label>
+                            <div class="select-wrapper">
+                              <select v-model="currentItem.productId" @change="handleProductChange" class="form-control">
+                                  <option :value="0">Chọn sản phẩm...</option>
+                                  <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }}</option>
+                              </select>
+                              <i class="pi pi-chevron-down select-icon"></i>
+                            </div>
+                        </div>
+                        <div class="form-group variant-select">
+                            <label>Phiên bản</label>
+                            <div class="select-wrapper">
+                              <select v-model="currentItem.variantId" class="form-control" :disabled="!currentItem.productId">
+                                  <option :value="0">Chọn phiên bản...</option>
+                                  <option v-for="v in variants" :key="v.id" :value="v.id">
+                                      {{ v.sku }} - {{ v.colorName }} / {{ v.sizeValue }}
+                                  </option>
+                              </select>
+                              <i class="pi pi-chevron-down select-icon"></i>
+                            </div>
+                        </div>
+                        <div class="form-group qty-input">
+                            <label>SL</label>
+                            <input type="number" v-model="currentItem.quantity" min="1" class="form-control" />
+                        </div>
+                        <div class="form-group price-input">
+                            <label>Giá nhập</label>
+                            <input type="number" v-model="currentItem.importPrice" min="0" class="form-control" />
+                        </div>
+                        <div class="form-group action-btn">
+                            <label>&nbsp;</label>
+                            <button class="btn btn-primary" @click="addItem">Thêm</button>
+                        </div>
                     </div>
+                </div>
+
+                <div class="card table-container">
+                    <div class="section-header">
+                        <i class="pi pi-list"></i>
+                        <h3>Danh sách sản phẩm nhập</h3>
+                    </div>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Thông tin sản phẩm</th>
+                                <th>SL</th>
+                                <th>Giá nhập</th>
+                                <th>Thành tiền</th>
+                                <th class="text-right">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(item, index) in form.details" :key="index">
+                                <td><span class="sku-badge">{{ item.sku }}</span></td>
+                                <td><strong>{{ item.productVariantName }}</strong></td>
+                                <td>{{ item.quantity }}</td>
+                                <td>{{ item.importPrice.toLocaleString() }}đ</td>
+                                <td><span class="row-total">{{ (item.quantity * item.importPrice).toLocaleString() }}đ</span></td>
+                                <td class="text-right">
+                                    <button class="btn-text text-danger" @click="removeItem(index)">Xóa</button>
+                                </td>
+                            </tr>
+                            <tr v-if="!form.details?.length">
+                                <td colspan="6" class="text-center empty-row">Chưa có sản phẩm nào được chọn.</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <!-- Item Entry -->
-            <div class="form-section item-entry">
-                <h3>Add Items</h3>
-                <div class="entry-row">
-                    <div class="form-group product-select">
-                        <label>Product</label>
-                        <select v-model="currentItem.productId" @change="handleProductChange" class="form-control">
-                            <option :value="0">Select Product...</option>
-                            <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }}</option>
-                        </select>
+            <div class="side-column">
+                <div class="card summary-card sticky-card">
+                    <div class="section-header">
+                        <i class="pi pi-info-circle"></i>
+                        <h3>Thông tin chung</h3>
                     </div>
-                    <div class="form-group variant-select">
-                        <label>Variant</label>
-                        <select v-model="currentItem.variantId" class="form-control" :disabled="!currentItem.productId">
-                            <option :value="0">Select Variant...</option>
-                            <option v-for="v in variants" :key="v.id" :value="v.id">
-                                {{ v.sku }} - {{ v.colorName }} / {{ v.sizeValue }}
-                            </option>
-                        </select>
+                    <div class="form-group mb-4">
+                        <label>Nhà cung cấp</label>
+                        <div class="select-wrapper">
+                          <select v-model="form.supplierId" class="form-control">
+                              <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+                          </select>
+                          <i class="pi pi-chevron-down select-icon"></i>
+                        </div>
                     </div>
-                    <div class="form-group qty- input">
-                        <label>Qty</label>
-                        <input type="number" v-model="currentItem.quantity" min="1" class="form-control" />
+                    <div class="form-group mb-4">
+                        <label>Ghi chú phiếu nhập</label>
+                        <textarea v-model="form.notes" class="form-control" rows="3" placeholder="Nhập ghi chú..."></textarea>
                     </div>
-                    <div class="form-group price-input">
-                        <label>Import Price</label>
-                        <input type="number" v-model="currentItem.importPrice" min="0" class="form-control" />
+
+                    <div class="summary-details">
+                        <div class="summary-line">
+                            <span>Tổng số mặt hàng:</span>
+                            <span>{{ form.details?.length || 0 }}</span>
+                        </div>
+                        <div class="summary-line total">
+                            <span>TỔNG CỘNG:</span>
+                            <span class="total-price">{{ totalAmount.toLocaleString() }}đ</span>
+                        </div>
                     </div>
-                    <div class="form-group action-btn">
-                        <label>&nbsp;</label>
-                        <button class="btn btn-secondary" @click="addItem">Add</button>
-                    </div>
+
+                    <button class="btn btn-primary btn-block btn-lg mt-6" @click="submitForm" :disabled="isLoading">
+                        <i class="pi pi-save"></i>
+                        <span>{{ isLoading ? 'Đang lưu...' : 'Hoàn tất nhập hàng' }}</span>
+                    </button>
                 </div>
-            </div>
-
-            <!-- Items Table -->
-            <div class="form-section">
-                <h3>Items List</h3>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>SKU</th>
-                            <th>Product Info</th>
-                            <th>Qty</th>
-                            <th>Import Price</th>
-                            <th>Subtotal</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(item, index) in form.details" :key="index">
-                            <td>{{ item.sku }}</td>
-                            <td>{{ item.productVariantName }}</td>
-                            <td>{{ item.quantity }}</td>
-                            <td>{{ item.importPrice.toLocaleString() }}</td>
-                            <td>{{ (item.quantity * item.importPrice).toLocaleString() }}</td>
-                            <td>
-                                <button class="text-danger btn-text" @click="removeItem(index)">Remove</button>
-                            </td>
-                        </tr>
-                        <tr v-if="!form.details?.length">
-                            <td colspan="6" class="text-center">No items added.</td>
-                        </tr>
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="4" style="text-align: right; font-weight: bold;">TOTAL:</td>
-                            <td style="font-weight: bold; font-size: 1.1rem;">{{ totalAmount.toLocaleString() }}</td>
-                            <td></td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-
-            <div class="form-actions">
-                <button class="btn btn-primary btn-lg" @click="submitForm" :disabled="isLoading">
-                    {{ isLoading ? 'Saving...' : 'Create Receipt' }}
-                </button>
             </div>
         </div>
     </div>
@@ -237,144 +262,143 @@ onMounted(loadInitialData);
 
 <style scoped>
 .receipt-form-view {
-    max-width: 1000px;
-    margin: 0 auto;
+    padding-bottom: 3rem;
+    animation: fade-in 0.4s ease-out;
 }
 
-.header {
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.section-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
 }
 
-.card {
-    background-color: var(--color-surface);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    padding: 2rem;
-    border: 1px solid var(--border-color);
+.section-header i {
+    color: var(--color-primary);
+    font-size: 1.25rem;
+}
+
+.section-header h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 700;
 }
 
 .form-section {
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px dashed var(--border-color);
-}
-
-.form-section h3 {
-    margin-bottom: 1rem;
-    color: var(--color-heading);
-    font-size: 1.1rem;
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
 .entry-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 2fr 2fr 80px 1fr auto;
     gap: 1rem;
-    align-items: flex-start;
-    flex-wrap: wrap;
+    align-items: flex-end;
 }
 
-.form-group {
+.qty-input input, .price-input input {
+    text-align: right;
+}
+
+.sku-badge {
+    background: #f1f5f9;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.8125rem;
+}
+
+.row-total {
+    font-weight: 700;
+    color: var(--color-text-main);
+}
+
+.text-right {
+    text-align: right;
+}
+
+.empty-row {
+    padding: 3rem 0 !important;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.summary-card {
+    padding: 1.5rem;
+}
+
+.sticky-card {
+    position: sticky;
+    top: 1rem;
+}
+
+.summary-details {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 12px;
+    margin-top: 2rem;
+}
+
+.summary-line {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
 }
 
-.product-select {
-    flex: 2;
-    min-width: 200px;
+.summary-line.total {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+    font-weight: 800;
+    color: var(--color-text-main);
 }
 
-.variant-select {
-    flex: 2;
-    min-width: 200px;
+.total-price {
+    font-size: 1.25rem;
+    color: var(--color-primary);
 }
 
-.qty-input {
-    flex: 1;
-    min-width: 80px;
+label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  margin-bottom: 0.5rem;
+  display: block;
 }
 
-.price-input {
-    flex: 1;
-    min-width: 120px;
-}
-
-.action-btn {
-    min-width: 80px;
-}
-
-.form-control {
-    padding: 0.625rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    background-color: var(--color-background);
-}
-
-.table {
+.btn-block {
     width: 100%;
-    border-collapse: collapse;
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
 }
 
-.table th,
-.table td {
-    padding: 0.75rem;
-    border-bottom: 1px solid var(--border-color);
-    text-align: left;
+.shadow-glow {
+    box-shadow: 0 0 20px rgba(234, 179, 8, 0.05);
 }
 
-.text-center {
-    text-align: center;
-}
+.mb-4 { margin-bottom: 1rem; }
+.mt-6 { margin-top: 1.5rem; }
 
-.text-danger {
-    color: var(--color-danger);
-}
-
-.btn-text {
-    background: none;
-    border: none;
-    cursor: pointer;
-}
-
-.btn-text:hover {
-    text-decoration: underline;
-}
-
-.btn {
-    padding: 0.625rem 1.25rem;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    border: 1px solid var(--border-color);
-    background: white;
-}
-
-.btn-secondary {
-    background-color: var(--color-primary);
-    color: white;
-    border: none;
-}
-
-.btn-primary {
-    background-color: var(--color-primary);
-    color: white;
-    border: none;
-}
-
-.btn-lg {
-    padding: 0.75rem 2rem;
-    font-size: 1rem;
-    width: 100%;
-}
-
-.form-actions {
-    margin-top: 1rem;
+@media (max-width: 1024px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .sticky-card { position: static; }
 }
 </style>

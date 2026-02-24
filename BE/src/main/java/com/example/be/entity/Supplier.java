@@ -25,5 +25,6 @@ public class Supplier {
     private String email;
 
     @Column(name = "active")
+    @Builder.Default
     private Boolean active = true;
 }

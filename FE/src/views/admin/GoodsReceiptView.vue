@@ -33,39 +33,53 @@ onMounted(loadReceipts);
 
 <template>
     <div class="receipt-view">
-        <div class="header">
-            <h2>Goods Receipts</h2>
-            <div class="actions">
-                <input type="text" v-model="searchQuery" placeholder="Search receipt..." class="search-input" />
-                <button class="btn btn-primary" @click="$router.push('/admin/goods-receipts/new')">New Import</button>
+        <div class="page-header">
+            <div class="page-title">
+                <h2>Nhập kho</h2>
+            </div>
+            <button class="btn btn-primary btn-add" @click="$router.push('/admin/goods-receipts/new')">
+                <i class="pi pi-plus"></i>
+                <span>Nhập hàng mới</span>
+            </button>
+        </div>
+
+        <div class="action-bar card">
+            <div class="filter-group">
+                <div class="search-wrapper">
+                    <i class="pi pi-search search-icon"></i>
+                    <input type="text" v-model="searchQuery" placeholder="Tìm ID, nhà cung cấp, người nhập..." class="search-input" />
+                </div>
             </div>
         </div>
 
-        <div v-if="isLoading" class="loading">Loading...</div>
+        <div v-if="isLoading" class="loading">Đang tải...</div>
 
         <div v-else class="card table-container">
             <table>
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Supplier</th>
-                        <th>Date</th>
-                        <th>Imported By</th>
-                        <th>Total</th>
-                        <th>Actions</th>
+                        <th>Mã phiếu</th>
+                        <th>Nhà cung cấp</th>
+                        <th>Ngày nhập</th>
+                        <th>Người nhập</th>
+                        <th>Tổng tiền</th>
+                        <th class="text-right">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="r in filteredReceipts" :key="r.id">
-                        <td>{{ r.id }}</td>
-                        <td>{{ r.supplierName }}</td>
-                        <td>{{ new Date(r.importDate!).toLocaleDateString() }} {{ new
-                            Date(r.importDate!).toLocaleTimeString() }}</td>
-                        <td>{{ r.username }}</td>
-                        <td>{{ r.totalAmount?.toLocaleString() }}</td>
+                        <td><span class="id-badge">#{{ r.id }}</span></td>
+                        <td><strong>{{ r.supplierName }}</strong></td>
                         <td>
-                            <!-- View Detail Logic to be added later -->
-                            <button class="btn-text">View</button>
+                          <div class="date-cell">
+                            <span>{{ new Date(r.importDate!).toLocaleDateString() }}</span>
+                            <small>{{ new Date(r.importDate!).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</small>
+                          </div>
+                        </td>
+                        <td>{{ r.username }}</td>
+                        <td><span class="price-val">{{ r.totalAmount?.toLocaleString() }}đ</span></td>
+                        <td class="text-right">
+                            <button class="btn-text">Chi tiết</button>
                         </td>
                     </tr>
                 </tbody>
@@ -75,94 +89,62 @@ onMounted(loadReceipts);
 </template>
 
 <style scoped>
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-
-.actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.search-input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    min-width: 200px;
-}
-
 .loading {
     text-align: center;
-    padding: 2rem;
+    padding: 3rem;
     color: var(--color-text-muted);
 }
 
-.card {
-    background-color: var(--color-surface);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    padding: 1.5rem;
-    border: 1px solid var(--border-color);
-}
-
-.table-container {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th,
-td {
-    padding: 1rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-}
-
-th {
+.id-badge {
+    background: #f1f5f9;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
     font-weight: 600;
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: 0.8125rem;
+    color: #475569;
 }
 
-.btn {
-    padding: 0.625rem 1.25rem;
-    border-radius: var(--radius-md);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: none;
-    font-size: 0.9rem;
+.date-cell {
+  display: flex;
+  flex-direction: column;
 }
 
-.btn-primary {
-    background-color: var(--color-primary);
-    color: white;
+.date-cell small {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
 
-.btn-primary:hover {
-    background-color: var(--color-primary-dark);
+.price-val {
+    font-weight: 600;
+    color: var(--color-text-main);
 }
 
 .btn-text {
     background: none;
     border: none;
     color: var(--color-primary);
+    font-weight: 500;
     padding: 0 0.5rem;
+    font-size: 0.875rem;
 }
 
 .btn-text:hover {
     text-decoration: underline;
+}
+
+.text-right {
+    text-align: right;
+}
+
+table th {
+    background-color: #f9fafb;
+    padding: 1rem;
+}
+
+table td {
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--color-text-main);
 }
 </style>

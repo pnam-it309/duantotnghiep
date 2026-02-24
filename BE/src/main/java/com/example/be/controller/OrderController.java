@@ -11,8 +11,14 @@ import com.example.be.service.ProductVariantService;
 import com.example.be.service.UserService;
 import com.example.be.util.DtoMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,10 +36,31 @@ public class OrderController {
     private final DtoMapper dtoMapper;
 
     @GetMapping
-    public ResponseEntity<List<OrderDTO>> getAllOrders() {
-        return ResponseEntity.ok(orderService.getAllOrders().stream()
-                .map(this::enrichOrderDTO)
-                .collect(Collectors.toList()));
+    @Transactional(readOnly = true)
+    public ResponseEntity<Page<OrderDTO>> getAllOrders(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction) {
+        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return ResponseEntity.ok(orderService.getAllOrders(pageable)
+                .map(this::enrichOrderDTO));
+    }
+
+    @GetMapping("/search")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Page<OrderDTO>> searchOrders(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction) {
+        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return ResponseEntity.ok(orderService.searchOrders(keyword, status, pageable)
+                .map(this::enrichOrderDTO));
     }
 
     @GetMapping("/user/{userId}")
@@ -44,6 +71,7 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<OrderDTO> getOrderById(@PathVariable Long id) {
         Order order = orderService.getOrderById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
@@ -60,52 +88,55 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<OrderDTO> createOrder(@RequestBody OrderRequestDTO orderRequest) {
-        // Warning: This logic is simplified. Real logic should handle validation
-        // properly.
+    public ResponseEntity<OrderDTO> createOrder(@Valid @RequestBody OrderRequestDTO orderRequest) {
+        if (orderRequest.getItems() == null || orderRequest.getItems().isEmpty()) {
+            throw new IllegalArgumentException("Order must have at least one item");
+        }
+
         Order order = new Order();
-
-        // Map basic fields from passed order object inside DTO if needed, or assume DTO
-        // structure
-        // Since OrderRequestDTO has 'Order' and 'List<OrderItem>', we need to be
-        // careful.
-        // Let's assume the Order object in RequestDTO has userId, couponId etc set but
-        // not relations
-
         Order requestOrder = orderRequest.getOrder();
-        if (requestOrder != null) {
-            order.setSubtotal(requestOrder.getSubtotal());
-            order.setDiscountTotal(requestOrder.getDiscountTotal());
-            order.setFinalTotal(requestOrder.getFinalTotal());
-            order.setStatus(requestOrder.getStatus());
+        
+        if (requestOrder == null) {
+            throw new IllegalArgumentException("Order details are missing");
+        }
 
-            if (requestOrder.getUser() != null && requestOrder.getUser().getId() != null) {
-                User user = userService.getUserById(requestOrder.getUser().getId())
-                        .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-                order.setUser(user);
-            }
+        order.setSubtotal(requestOrder.getSubtotal());
+        order.setDiscountTotal(requestOrder.getDiscountTotal());
+        order.setFinalTotal(requestOrder.getFinalTotal());
+        order.setStatus("PENDING");
+        order.setShippingAddress(requestOrder.getShippingAddress());
+        order.setPaymentMethod(requestOrder.getPaymentMethod());
+        order.setPhoneNumber(requestOrder.getPhoneNumber());
 
-            if (requestOrder.getCoupon() != null && requestOrder.getCoupon().getId() != null) {
-                Coupon coupon = couponService.getCouponById(requestOrder.getCoupon().getId())
-                        .orElse(null); // Coupon optional
-                order.setCoupon(coupon);
-            }
+        if (requestOrder.getUser() != null && requestOrder.getUser().getId() != null) {
+            User user = userService.getUserById(requestOrder.getUser().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+            order.setUser(user);
         }
 
         List<OrderItem> items = new ArrayList<>();
-        if (orderRequest.getItems() != null) {
-            for (OrderItem itemReq : orderRequest.getItems()) {
-                OrderItem item = new OrderItem();
-                item.setQuantity(itemReq.getQuantity());
-                item.setPrice(itemReq.getPrice());
-
-                if (itemReq.getProductVariant() != null && itemReq.getProductVariant().getId() != null) {
-                    ProductVariant variant = productVariantService.getVariantById(itemReq.getProductVariant().getId())
-                            .orElseThrow(() -> new ResourceNotFoundException("Variant not found"));
-                    item.setProductVariant(variant);
-                }
-                items.add(item);
+        for (OrderItem itemReq : orderRequest.getItems()) {
+            if (itemReq.getQuantity() <= 0) {
+                throw new IllegalArgumentException("Item quantity must be positive");
             }
+
+            OrderItem item = new OrderItem();
+            item.setQuantity(itemReq.getQuantity());
+            item.setPrice(itemReq.getPrice());
+
+            if (itemReq.getProductVariant() != null && itemReq.getProductVariant().getId() != null) {
+                ProductVariant variant = productVariantService.getVariantById(itemReq.getProductVariant().getId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Variant not found"));
+                
+                if (variant.getStockQuantity() < itemReq.getQuantity()) {
+                    throw new IllegalArgumentException("Not enough stock for variant: " + variant.getSku());
+                }
+                
+                item.setProductVariant(variant);
+            } else {
+                throw new IllegalArgumentException("Product variant is required for each item");
+            }
+            items.add(item);
         }
 
         Order savedOrder = orderService.createOrder(order, items);
@@ -113,7 +144,7 @@ public class OrderController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<OrderDTO> updateOrder(@PathVariable Long id, @RequestBody OrderDTO orderDTO) {
+    public ResponseEntity<OrderDTO> updateOrder(@PathVariable Long id, @Valid @RequestBody OrderDTO orderDTO) {
         Order existingOrder = orderService.getOrderById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
 

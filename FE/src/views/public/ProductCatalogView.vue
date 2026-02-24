@@ -1,19 +1,51 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, watch, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import productService, { type ProductDTO } from '../../services/productService';
+import brandService, { type BrandDTO } from '../../services/brandService';
+import categoryService, { type CategoryDTO } from '../../services/categoryService';
+import ProductCard from '../../components/ProductCard.vue';
+import ProductFilters from '../../components/ProductFilters.vue';
 
 const router = useRouter();
 const products = ref<ProductDTO[]>([]);
+const brands = ref<BrandDTO[]>([]);
+const categories = ref<CategoryDTO[]>([]);
 const isLoading = ref(true);
+
+// Filters State
 const searchQuery = ref('');
+const filters = reactive({
+    categoryId: undefined as number | undefined,
+    brandId: undefined as number | undefined,
+    minPrice: undefined as number | undefined,
+    maxPrice: undefined as number | undefined
+});
+
+const loadFilters = async () => {
+    try {
+        const [bRes, cRes] = await Promise.all([
+            brandService.getAllBrands(),
+            categoryService.getAllCategories()
+        ]);
+        brands.value = bRes.data;
+        categories.value = cRes.data;
+    } catch (e) {
+        console.error("Failed to load filters", e);
+    }
+};
 
 const loadProducts = async () => {
     isLoading.value = true;
     try {
-        const res = await productService.getAllProducts();
-        // Only show active products
-        products.value = res.data.filter(p => p.active);
+        const res = await productService.searchProducts({
+            keyword: searchQuery.value,
+            brandId: filters.brandId,
+            categoryId: filters.categoryId,
+            minPrice: filters.minPrice,
+            maxPrice: filters.maxPrice
+        });
+        products.value = res.data;
     } catch (e) {
         console.error("Failed to load products", e);
     } finally {
@@ -21,47 +53,67 @@ const loadProducts = async () => {
     }
 };
 
-const filteredProducts = computed(() => {
-    if (!searchQuery.value) return products.value;
-    const q = searchQuery.value.toLowerCase();
-    return products.value.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.categoryName?.toLowerCase().includes(q) ||
-        p.brandName?.toLowerCase().includes(q)
-    );
-});
+let debounceTimeout: any;
+const debouncedLoad = () => {
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(loadProducts, 300);
+};
+
+// Watchers
+watch([searchQuery, () => filters.brandId, () => filters.categoryId], debouncedLoad);
+
+const applyPriceFilter = () => {
+    loadProducts();
+};
+
+const resetFilters = () => {
+    searchQuery.value = '';
+    filters.categoryId = undefined;
+    filters.brandId = undefined;
+    filters.minPrice = undefined;
+    filters.maxPrice = undefined;
+    loadProducts();
+};
 
 const viewProduct = (id: number) => {
     router.push({ name: 'shop-product-detail', params: { id } });
 };
 
-onMounted(loadProducts);
+onMounted(() => {
+    loadFilters();
+    loadProducts();
+});
 </script>
 
 <template>
     <div class="catalog-view container">
         <div class="catalog-header">
             <h1>Shop All Products</h1>
-            <input type="text" v-model="searchQuery" placeholder="Search products..." class="search-input" />
+            <div class="search-bar">
+                <input type="text" v-model="searchQuery" placeholder="Search products..." class="search-input" />
+            </div>
         </div>
 
-        <div v-if="isLoading" class="loading">Loading products...</div>
+        <div class="catalog-layout">
+            <!-- Sidebar -->
+            <ProductFilters :categories="categories" :brands="brands" :filters="filters"
+                @update:categoryId="filters.categoryId = $event" @update:brandId="filters.brandId = $event"
+                @update:minPrice="filters.minPrice = $event" @update:maxPrice="filters.maxPrice = $event"
+                @apply="applyPriceFilter" @reset="resetFilters" />
 
-        <div v-else class="product-grid">
-            <div v-for="product in filteredProducts" :key="product.id" class="product-card"
-                @click="viewProduct(product.id)">
-                <div class="product-image">
-                    <div class="placeholder-img">{{ product.name.charAt(0) }}</div>
+            <!-- Grid -->
+            <main class="product-content">
+                <div v-if="isLoading" class="loading">Loading products...</div>
+
+                <div v-else-if="products.length === 0" class="no-results">
+                    No products found matching your criteria.
                 </div>
-                <div class="product-info">
-                    <div class="meta">
-                        <span class="category">{{ product.categoryName }}</span>
-                        <span class="brand">{{ product.brandName }}</span>
-                    </div>
-                    <h3>{{ product.name }}</h3>
-                    <div class="price">View Details</div>
+
+                <div v-else class="product-grid">
+                    <ProductCard v-for="product in products" :key="product.id" :product="product"
+                        @click="viewProduct" />
                 </div>
-            </div>
+            </main>
         </div>
     </div>
 </template>
@@ -86,63 +138,31 @@ onMounted(loadProducts);
     font-size: 1rem;
 }
 
+.catalog-layout {
+    display: flex;
+    gap: 2rem;
+}
+
+.product-content {
+    flex: 1;
+}
+
 .product-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 2rem;
 }
 
-.product-card {
-    background: white;
-    border: 1px solid #f3f4f6;
-    border-radius: 12px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.product-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-}
-
-.product-image {
-    height: 200px;
-    background: #f9fafb;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 4rem;
-    color: #d1d5db;
-}
-
-.product-info {
-    padding: 1.5rem;
-}
-
-.meta {
-    display: flex;
-    gap: 0.5rem;
-    font-size: 0.8rem;
+.no-results {
+    text-align: center;
+    padding: 4rem;
     color: #6b7280;
-    margin-bottom: 0.5rem;
-}
-
-.meta span {
-    background: #f3f4f6;
-    padding: 2px 8px;
-    border-radius: 4px;
-}
-
-h3 {
-    margin: 0 0 1rem 0;
     font-size: 1.1rem;
-    color: #111827;
-    line-height: 1.4;
 }
 
-.price {
-    font-weight: bold;
-    color: #4f46e5;
+@media (max-width: 768px) {
+    .catalog-layout {
+        flex-direction: column;
+    }
 }
 </style>

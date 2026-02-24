@@ -6,11 +6,15 @@ export interface CouponDTO {
   discountAmount: number;
   minOrderValue: number;
   expiryDate: string; // ISO DateTime string
+  discountType: string;
 }
 
 export default {
   getAllCoupons() {
     return apiClient.get<CouponDTO[]>('/coupons');
+  },
+  searchCoupons(params?: any) {
+    return apiClient.get('/coupons/search', { params });
   },
   getCouponById(id: number) {
     return apiClient.get<CouponDTO>(`/coupons/${id}`);

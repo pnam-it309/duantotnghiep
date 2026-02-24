@@ -11,7 +11,11 @@ export interface SupplierDTO {
 
 const supplierService = {
     getAllSuppliers() {
-        return api.get<SupplierDTO[]>('/suppliers');
+        return api.get<SupplierDTO[]>('/suppliers/all');
+    },
+
+    getSuppliers(params?: any) {
+        return api.get('/suppliers', { params });
     },
 
     getActiveSuppliers() {

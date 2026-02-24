@@ -2,6 +2,7 @@ package com.example.be.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "products")
@@ -29,4 +30,10 @@ public class Product {
     private Brand brand;
 
     private Boolean active;
+
+    @Column(name = "price")
+    private BigDecimal price;
+
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private java.util.List<ProductVariant> variants;
 }

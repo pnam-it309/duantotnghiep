@@ -1,11 +1,12 @@
 package com.example.be.service;
 
 import com.example.be.entity.User;
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.Optional;
 
 public interface UserService {
-    List<User> getAllUsers();
+    Page<User> getAllUsers(Pageable pageable);
 
     Optional<User> getUserById(Long id);
 
@@ -14,4 +15,6 @@ public interface UserService {
     User saveUser(User user);
 
     void deleteUser(Long id);
+
+    Page<User> searchUsers(String keyword, String role, Pageable pageable);
 }

@@ -7,7 +7,10 @@ export interface BrandDTO {
 
 export default {
   getAllBrands() {
-    return apiClient.get<BrandDTO[]>('/brands');
+    return apiClient.get<BrandDTO[]>('/brands/all');
+  },
+  getBrands(params?: any) {
+    return apiClient.get('/brands', { params });
   },
   getBrandById(id: number) {
     return apiClient.get<BrandDTO>(`/brands/${id}`);

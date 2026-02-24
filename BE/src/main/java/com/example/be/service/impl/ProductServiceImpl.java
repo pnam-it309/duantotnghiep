@@ -6,8 +6,9 @@ import com.example.be.repository.ProductImageRepository;
 import com.example.be.repository.ProductRepository;
 import com.example.be.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,8 +20,8 @@ public class ProductServiceImpl implements ProductService {
     private final ProductImageRepository productImageRepository;
 
     @Override
-    public List<Product> getAllProducts() {
-        return productRepository.findAll();
+    public Page<Product> getAllProducts(Pageable pageable) {
+        return productRepository.findAll(pageable);
     }
 
     @Override
@@ -66,5 +67,11 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public void deleteProductImage(Long imageId) {
         productImageRepository.deleteById(imageId);
+    }
+
+    @Override
+    public Page<Product> searchProducts(String keyword, Long categoryId, Long brandId, java.math.BigDecimal minPrice,
+            java.math.BigDecimal maxPrice, Boolean active, Pageable pageable) {
+        return productRepository.searchProducts(keyword, categoryId, brandId, minPrice, maxPrice, active, pageable);
     }
 }

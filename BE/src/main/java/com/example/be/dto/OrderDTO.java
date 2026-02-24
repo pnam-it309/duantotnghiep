@@ -15,10 +15,13 @@ public class OrderDTO {
     private BigDecimal subtotal;
     private BigDecimal discountTotal;
     private BigDecimal finalTotal;
+    private String shippingAddress;
+    private String paymentMethod;
+    private String phoneNumber;
     private String status;
     private String carrierName;
     private String trackingCode;
-    private int pointsUsed;
+    private Integer pointsUsed;
     private BigDecimal pointsDiscount;
     private LocalDateTime createdAt;
     private List<OrderItemDTO> items;

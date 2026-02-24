@@ -1,37 +1,85 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import userService, { type UserDTO } from '../../services/userService';
 import importService from '../../services/importService';
+import Pagination from '../../components/Pagination.vue';
+import ScanCCCDModal from '../../components/ScanCCCDModal.vue';
 
 const users = ref<UserDTO[]>([]);
 const isLoading = ref(false);
 const showForm = ref(false);
 const editingUser = ref<UserDTO | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const cccdModal = ref<any>(null);
+
+// Pagination state
+const currentPage = ref(0);
+const totalPages = ref(0);
+const totalElements = ref(0);
+const pageSize = ref(5);
+
+// Filters
 const searchQuery = ref('');
+const selectedRole = ref('all');
 
-const filteredUsers = computed(() => {
-    if (!searchQuery.value) return users.value;
-    const lowerQuery = searchQuery.value.toLowerCase();
-    return users.value.filter(user =>
-        user.username.toLowerCase().includes(lowerQuery) ||
-        user.email.toLowerCase().includes(lowerQuery) ||
-        user.id.toString().includes(lowerQuery)
-    );
+const formData = ref({ 
+    username: '', 
+    email: '', 
+    password: '',
+    fullName: '',
+    phoneNumber: '',
+    address: '',
+    role: 'CUSTOMER'
 });
-
-const formData = ref({ username: '', email: '', password: '' });
 
 const fetchUsers = async () => {
     isLoading.value = true;
     try {
-        const response = await userService.getAllUsers();
-        users.value = response.data;
+        const params: any = {
+            page: currentPage.value,
+            size: pageSize.value,
+            keyword: searchQuery.value || undefined,
+            role: selectedRole.value === 'all' ? undefined : selectedRole.value
+        };
+        const response = await userService.searchUsers(params);
+        users.value = response.data.content;
+        totalPages.value = response.data.totalPages;
+        totalElements.value = response.data.totalElements;
     } catch (error) {
         console.error('Error fetching users:', error);
     } finally {
         isLoading.value = false;
     }
+};
+
+watch([searchQuery, selectedRole], () => {
+    currentPage.value = 0;
+    fetchUsers();
+});
+
+const handlePageChange = (page: number) => {
+    currentPage.value = page;
+    fetchUsers();
+};
+
+const handleCCCDScanned = (data: any) => {
+    openForm();
+    formData.value.fullName = data.fullName;
+    formData.value.address = data.address;
+    alert('Đã quét CCCD cho: ' + data.fullName);
+};
+
+const sendWelcomeSMS = async (user: UserDTO) => {
+    try {
+        await userService.sendSMS(user.id, `Xin chào ${user.fullName || user.username}, chào mừng bạn đến với cửa hàng!`);
+        alert('Đã gửi tin nhắn SMS chào mừng đến ' + (user.phoneNumber || 'người dùng'));
+    } catch (error) {
+        alert('Không thể gửi SMS');
+    }
+};
+
+const exportExcel = () => {
+    window.open(`${import.meta.env.VITE_API_BASE_URL || '/api'}/export/users/excel`, '_blank');
 };
 
 const triggerFileInput = () => {
@@ -44,11 +92,11 @@ const handleFileUpload = async (event: Event) => {
         const file = target.files[0];
         try {
             await importService.importUsers(file!);
-            alert('Import successful!');
+            alert('Nhập Excel thành công!');
             await fetchUsers();
         } catch (error) {
             console.error('Import failed', error);
-            alert('Import failed');
+            alert('Nhập Excel thất bại');
         } finally {
             if (fileInput.value) fileInput.value.value = '';
         }
@@ -56,32 +104,50 @@ const handleFileUpload = async (event: Event) => {
 };
 
 const handleSubmit = async () => {
-    if (!formData.value.username || !formData.value.email) return;
+    if (!formData.value.username || !formData.value.email || !formData.value.fullName) {
+        alert('Vui lòng điền đầy đủ Tên đăng nhập, Email và Họ tên.');
+        return;
+    }
 
     try {
-        const payload: Partial<UserDTO> & { password?: string } = {
+        const payload: UserDTO = {
             username: formData.value.username,
-            email: formData.value.email
-        };
-        if (formData.value.password) {
-            payload.password = formData.value.password;
-        }
+            email: formData.value.email,
+            fullName: formData.value.fullName,
+            phoneNumber: formData.value.phoneNumber || undefined,
+            address: formData.value.address,
+            role: formData.value.role,
+            password: formData.value.password || undefined
+        } as any;
 
         if (editingUser.value) {
             // In real app, avoid sending password if not changed, or handle securely
-            await userService.updateUser(editingUser.value.id, { ...editingUser.value, ...payload });
+            await userService.updateUser(editingUser.value.id, { ...editingUser.value, ...payload } as any);
         } else {
             await userService.createUser(payload as any);
         }
         await fetchUsers();
         closeForm();
-    } catch (error) {
-        console.error('Error saving user:', error);
+    } catch (error: any) {
+        console.error('Lỗi khi lưu người dùng:', error);
+        let message = 'Đã xảy ra lỗi không xác định';
+        if (error.response?.data) {
+            if (typeof error.response.data === 'object') {
+                message = Object.entries(error.response.data)
+                    .map(([field, msg]) => `${field}: ${msg}`)
+                    .join('\n');
+            } else {
+                message = error.response.data;
+            }
+        } else {
+            message = error.message;
+        }
+        alert('Lỗi khi lưu người dùng:\n' + message);
     }
 };
 
 const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa người dùng này?')) return;
 
     try {
         await userService.deleteUser(id);
@@ -97,14 +163,22 @@ const openForm = (user?: UserDTO) => {
         formData.value = {
             username: user.username,
             email: user.email,
-            password: '' // Don't fill password on edit
+            password: '', // Don't fill password on edit
+            fullName: user.fullName || '',
+            phoneNumber: user.phoneNumber || '',
+            address: user.address || '',
+            role: user.role || 'CUSTOMER'
         };
     } else {
         editingUser.value = null;
         formData.value = {
             username: '',
             email: '',
-            password: ''
+            password: '',
+            fullName: '',
+            phoneNumber: '',
+            address: '',
+            role: 'CUSTOMER'
         };
     }
     showForm.value = true;
@@ -113,7 +187,7 @@ const openForm = (user?: UserDTO) => {
 const closeForm = () => {
     showForm.value = false;
     editingUser.value = null;
-    formData.value = { username: '', email: '', password: '' };
+    formData.value = { username: '', email: '', password: '', fullName: '', phoneNumber: '', address: '', role: 'CUSTOMER' };
 };
 
 onMounted(() => {
@@ -123,77 +197,167 @@ onMounted(() => {
 
 <template>
     <div class="user-view">
-        <div class="header">
-            <h2>Users</h2>
-            <div class="actions">
-                <input type="text" v-model="searchQuery" placeholder="Search user..." class="search-input" />
-                <input type="file" ref="fileInput" @change="handleFileUpload" style="display: none"
-                    accept=".xlsx, .xls" />
-                <button class="btn btn-secondary" @click="importService.downloadTemplate('users')"
-                    style="margin-right: 0.5rem">Download Template</button>
-                <button class="btn btn-secondary" @click="triggerFileInput" style="margin-right: 0.5rem">Import
-                    Excel</button>
-                <button class="btn btn-primary" @click="openForm()">Add User</button>
+        <div class="page-header">
+            <div class="page-title">
+                <h2>Người dùng</h2>
+            </div>
+            <button class="btn btn-primary btn-add" @click="openForm()">
+                <i class="pi pi-plus"></i>
+                <span>Thêm người dùng</span>
+            </button>
+        </div>
+
+        <div class="action-bar card">
+            <div class="filter-group">
+                <div class="search-wrapper">
+                    <i class="pi pi-search search-icon"></i>
+                    <input type="text" v-model="searchQuery" placeholder="Tìm tên, email, số điện thoại..." class="search-input" />
+                </div>
+
+                <div class="select-group">
+                  <div class="select-wrapper">
+                    <select v-model="selectedRole" class="filter-select">
+                      <option value="all">Tất cả vai trò</option>
+                      <option value="CUSTOMER">Khách hàng</option>
+                      <option value="EMPLOYEE">Nhân viên</option>
+                      <option value="ADMIN">Quản trị viên</option>
+                    </select>
+                    <i class="pi pi-chevron-down select-icon"></i>
+                  </div>
+                </div>
+
+                <button class="btn btn-outline" @click="cccdModal.open()">
+                  <i class="pi pi-id-card"></i>
+                  <span>Quét CCCD</span>
+                </button>
+            </div>
+
+            <div class="button-group">
+                <div class="import-export">
+                    <input type="file" ref="fileInput" @change="handleFileUpload" style="display: none" accept=".xlsx, .xls" />
+                    <button class="btn btn-outline" @click="exportExcel()" title="Xuất Excel">
+                        <i class="pi pi-file-export"></i>
+                        <span>Xuất Excel</span>
+                    </button>
+                    <button class="btn btn-outline" @click="triggerFileInput()" title="Nhập Excel">
+                        <i class="pi pi-file-import"></i>
+                        <span>Nhập Excel</span>
+                    </button>
+                </div>
+                <button class="btn btn-outline" @click="importService.downloadTemplate('users')" title="Tải mẫu">
+                    <i class="pi pi-download"></i>
+                    <span>Tải mẫu</span>
+                </button>
             </div>
         </div>
 
-        <div v-if="isLoading" class="loading">Loading...</div>
+        <div v-if="isLoading" class="loading">Đang tải...</div>
 
         <div v-else class="card table-container">
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Username</th>
-                        <th>Email</th>
-                        <th>Tier</th>
-                        <th>Points</th>
-                        <th>Actions</th>
+                        <th>Thông tin người dùng</th>
+                        <th>Vai trò</th>
+                        <th>Hạng thành viên</th>
+                        <th>Điểm thưởng</th>
+                        <th>Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="user in filteredUsers" :key="user.id">
+                    <tr v-for="user in users" :key="user.id">
                         <td>{{ user.id }}</td>
-                        <td>{{ user.username }}</td>
-                        <td>{{ user.email }}</td>
+                        <td>
+                          <div><strong>{{ user.fullName || user.username }}</strong></div>
+                          <div class="text-xs text-muted">{{ user.email }}</div>
+                          <div class="text-xs text-muted">{{ user.phoneNumber }}</div>
+                        </td>
+                        <td>
+                          <span class="badge" :class="user.role === 'ADMIN' ? 'badge-danger' : (user.role === 'EMPLOYEE' ? 'badge-warning' : 'badge-success')">
+                            {{ user.role }}
+                          </span>
+                        </td>
                         <td>
                             <span class="tier-badge" :class="user.membershipTier?.toLowerCase() || 'silver'">
-                                {{ user.membershipTier || 'SILVER' }}
+                                {{ user.membershipTier === 'SILVER' ? 'BẠC' : (user.membershipTier === 'GOLD' ? 'VÀNG' : (user.membershipTier === 'DIAMOND' ? 'KIM CƯƠNG' : 'BẠC')) }}
                             </span>
                         </td>
-                        <td>{{ user.rewardPoints }} pts</td>
+                        <td>{{ user.rewardPoints }} điểm</td>
                         <td>
-                            <button class="btn-text" @click="openForm(user)">Edit</button>
-                            <button class="btn-text text-danger" @click="handleDelete(user.id)">Delete</button>
+                            <button class="btn-text" @click="openForm(user)">Sửa</button>
+                            <button class="btn-text" @click="sendWelcomeSMS(user)">SMS</button>
+                            <button class="btn-text text-danger" @click="handleDelete(user.id)">Xóa</button>
                         </td>
                     </tr>
-                    <tr v-if="filteredUsers.length === 0">
-                        <td colspan="4" class="text-center">No users found.</td>
+                    <tr v-if="users.length === 0">
+                        <td colspan="6" class="text-center">Không tìm thấy người dùng nào.</td>
                     </tr>
                 </tbody>
             </table>
+
+            <Pagination 
+                :current-page="currentPage" 
+                :total-pages="totalPages" 
+                :total-elements="totalElements"
+                :page-size="pageSize"
+                @page-change="handlePageChange"
+            />
         </div>
+
+        <!-- Scan Modal -->
+        <ScanCCCDModal ref="cccdModal" @scanned="handleCCCDScanned" />
 
         <!-- Modal -->
         <div v-if="showForm" class="modal-overlay">
             <div class="modal card">
-                <h3>{{ editingUser ? 'Edit User' : 'Add User' }}</h3>
+                <h3>{{ editingUser ? 'Chỉnh sửa' : 'Thêm mới' }}</h3>
                 <form @submit.prevent="handleSubmit" class="form">
-                    <div class="form-group">
-                        <label for="username">Username</label>
-                        <input id="username" v-model="formData.username" type="text" required />
+                    <div class="form-row">
+                      <div class="form-group">
+                          <label for="username">Tên đăng nhập</label>
+                          <input id="username" v-model="formData.username" type="text" required />
+                      </div>
+                      <div class="form-group">
+                          <label for="fullName">Họ tên</label>
+                          <input id="fullName" v-model="formData.fullName" type="text" required />
+                      </div>
                     </div>
-                    <div class="form-group">
-                        <label for="email">Email</label>
-                        <input id="email" v-model="formData.email" type="email" required />
+                    
+                    <div class="form-row">
+                      <div class="form-group">
+                          <label for="email">Email</label>
+                          <input id="email" v-model="formData.email" type="email" required />
+                      </div>
+                      <div class="form-group">
+                          <label for="phoneNumber">Số điện thoại</label>
+                          <input id="phoneNumber" v-model="formData.phoneNumber" type="text" />
+                      </div>
                     </div>
+
                     <div class="form-group">
-                        <label for="password">Password {{ editingUser ? '(Leave blank to keep current)' : '' }}</label>
-                        <input id="password" v-model="formData.password" type="password" :required="!editingUser" />
+                        <label for="address">Địa chỉ</label>
+                        <textarea id="address" v-model="formData.address" rows="2"></textarea>
                     </div>
+
+                    <div class="form-row">
+                      <div class="form-group">
+                          <label for="role">Vai trò</label>
+                          <select id="role" v-model="formData.role">
+                            <option value="CUSTOMER">Khách hàng</option>
+                            <option value="EMPLOYEE">Nhân viên</option>
+                            <option value="ADMIN">Quản trị viên</option>
+                          </select>
+                      </div>
+                      <div class="form-group">
+                          <label for="password">Mật khẩu {{ editingUser ? '(Để trống nếu không đổi)' : '' }}</label>
+                          <input id="password" v-model="formData.password" type="password" :required="!editingUser" />
+                      </div>
+                    </div>
+
                     <div class="form-actions">
-                        <button type="button" class="btn" @click="closeForm">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                        <button type="button" class="btn" @click="closeForm">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Lưu</button>
                     </div>
                 </form>
             </div>
@@ -202,33 +366,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-
-.actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.search-input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    margin-right: 0.5rem;
-    min-width: 200px;
-}
-
 .loading {
     text-align: center;
-    padding: 2rem;
+    padding: 3rem;
     color: var(--color-text-muted);
 }
 
@@ -240,7 +380,9 @@ onMounted(() => {
     background: none;
     border: none;
     color: var(--color-primary);
+    font-weight: 500;
     padding: 0 0.5rem;
+    font-size: 0.875rem;
 }
 
 .btn-text:hover {
@@ -257,7 +399,8 @@ onMounted(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -266,14 +409,20 @@ onMounted(() => {
 
 .modal {
     width: 100%;
-    max-width: 400px;
+    max-width: 500px;
+    animation: modal-in 0.3s ease-out;
+}
+
+@keyframes modal-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .form {
-    margin-top: 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.25rem;
+    margin-top: 1.5rem;
 }
 
 .form-group {
@@ -282,10 +431,26 @@ onMounted(() => {
     gap: 0.5rem;
 }
 
-input {
-    padding: 0.625rem;
+label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+input, select, textarea {
+    padding: 0.625rem 0.875rem;
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    transition: all 0.2s;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
 }
 
 .form-actions {
@@ -295,26 +460,55 @@ input {
     margin-top: 1rem;
 }
 
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+}
+
 .tier-badge {
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.625rem;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: bold;
     color: white;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .tier-badge.silver {
-    background: #6c757d;
+    background: #94a3b8;
 }
 
 .tier-badge.gold {
-    background: #ffc107;
-    color: black;
-    text-shadow: none;
+    background: #fbbf24;
+    color: #451a03;
 }
 
 .tier-badge.diamond {
-    background: #6f42c1;
+    background: #8b5cf6;
+}
+
+/* Table Enhancements */
+.table-container {
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+table th {
+    background-color: #f9fafb;
+    padding: 1rem;
+}
+
+table td {
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--color-text-main);
 }
 </style>

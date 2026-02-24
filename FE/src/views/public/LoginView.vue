@@ -1,19 +1,26 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-// import { useCartStore } from '../../stores/cartStore';
+import { useAuthStore } from '../../stores/authStore';
 
-const router = useRouter();
-const route = useRoute();
-const userId = ref('');
+const authStore = useAuthStore();
+const username = ref('');
+const password = ref('');
+const isLoading = ref(false);
 
-const login = () => {
-    if (!userId.value) return;
-    localStorage.setItem('userId', userId.value);
+const handleLogin = async () => {
+    if (!username.value || !password.value) return;
 
-    // Redirect
-    const redirect = route.query.redirect as string || '/';
-    router.push(redirect);
+    isLoading.value = true;
+    try {
+        await authStore.login({
+            username: username.value,
+            password: password.value
+        });
+    } catch (e) {
+        // Error handled in store
+    } finally {
+        isLoading.value = false;
+    }
 };
 </script>
 
@@ -21,14 +28,22 @@ const login = () => {
     <div class="login-view container">
         <div class="login-card">
             <h1>Welcome Back</h1>
-            <p>Enter your User ID to login (Simulated for MVP)</p>
+            <p>Sign in to your account</p>
 
-            <form @submit.prevent="login">
-                <input type="number" v-model="userId" placeholder="User ID" required />
-                <button type="submit">Login</button>
+            <form @submit.prevent="handleLogin">
+                <input type="text" v-model="username" placeholder="Username" required />
+                <input type="password" v-model="password" placeholder="Password" required />
+
+                <div v-if="authStore.error" class="error-msg">{{ authStore.error }}</div>
+
+                <button type="submit" :disabled="isLoading">
+                    {{ isLoading ? 'Signing in...' : 'Login' }}
+                </button>
             </form>
 
-            <p class="hint">Don't have an ID? Check Admin > Users to find one (e.g., 1).</p>
+            <p class="hint">
+                Don't have an account? <router-link to="/register">Register here</router-link>
+            </p>
         </div>
     </div>
 </template>
@@ -66,7 +81,7 @@ input {
 button {
     width: 100%;
     padding: 1rem;
-    background: #4f46e5;
+    background: var(--color-primary);
     color: white;
     border: none;
     border-radius: 6px;
@@ -76,7 +91,7 @@ button {
 }
 
 button:hover {
-    background: #4338ca;
+    background: var(--color-primary-hover);
 }
 
 .hint {

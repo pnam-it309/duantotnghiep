@@ -118,7 +118,7 @@ const handleSubmit = async () => {
 };
 
 const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this variant?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa phiên bản này?')) return;
     try {
         await productVariantService.deleteVariant(id);
         await loadData();
@@ -174,34 +174,62 @@ onMounted(() => {
 
 <template>
     <div class="variant-view">
-        <div class="header">
-            <h2>Product Variants (Product #{{ productId }})</h2>
-            <div class="actions">
-                <input type="text" v-model="searchQuery" placeholder="Search SKU..." class="search-input" />
+        <div class="page-header">
+            <div class="page-title">
+                <h2>Các phiên bản (Sản phẩm #{{ productId }})</h2>
+            </div>
+            <button class="btn btn-primary btn-add" @click="openForm()">
+                <i class="pi pi-plus"></i>
+                <span>Thêm phiên bản</span>
+            </button>
+        </div>
 
-                <select v-model="selectedSizeId" class="filter-select">
-                    <option :value="0">All Sizes</option>
-                    <option v-for="s in sizes" :key="s.id" :value="s.id">{{ s.sizeValue }}</option>
-                </select>
+        <div class="action-bar card">
+            <div class="filter-group">
+                <div class="search-wrapper">
+                    <i class="pi pi-search search-icon"></i>
+                    <input type="text" v-model="searchQuery" placeholder="Tìm SKU..." class="search-input" />
+                </div>
 
-                <select v-model="selectedColorId" class="filter-select">
-                    <option :value="0">All Colors</option>
-                    <option v-for="c in colors" :key="c.id" :value="c.id">{{ c.colorName }}</option>
-                </select>
+                <div class="select-group">
+                  <div class="select-wrapper">
+                    <select v-model="selectedSizeId" class="filter-select">
+                        <option :value="0">Tất cả kích thước</option>
+                        <option v-for="s in sizes" :key="s.id" :value="s.id">{{ s.sizeValue }}</option>
+                    </select>
+                    <i class="pi pi-chevron-down select-icon"></i>
+                  </div>
+                </div>
 
-                <input type="file" ref="fileInput" @change="handleFileUpload" style="display: none"
-                    accept=".xlsx, .xls" />
-                <button class="btn btn-secondary" @click="importService.downloadTemplate('product_variants')"
-                    style="margin-right: 0.5rem">Download Template</button>
-                <button class="btn btn-secondary" @click="triggerFileInput" style="margin-right: 0.5rem">Import
-                    Excel</button>
-                <button class="btn btn-primary" @click="openForm()">Add Variant</button>
+                <div class="select-group">
+                  <div class="select-wrapper">
+                    <select v-model="selectedColorId" class="filter-select">
+                        <option :value="0">Tất cả màu sắc</option>
+                        <option v-for="c in colors" :key="c.id" :value="c.id">{{ c.colorName }}</option>
+                    </select>
+                    <i class="pi pi-chevron-down select-icon"></i>
+                  </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <div class="import-export">
+                    <input type="file" ref="fileInput" @change="handleFileUpload" style="display: none" accept=".xlsx, .xls" />
+                    <button class="btn btn-outline" @click="triggerFileInput" title="Nhập Excel">
+                        <i class="pi pi-file-import"></i>
+                        <span>Nhập Excel</span>
+                    </button>
+                </div>
+                <button class="btn btn-outline" @click="importService.downloadTemplate('product_variants')" title="Tải mẫu">
+                    <i class="pi pi-download"></i>
+                    <span>Tải mẫu</span>
+                </button>
             </div>
         </div>
 
-        <div v-if="!productId" class="alert-error">Invalid Product ID</div>
+        <div v-if="!productId" class="alert-error">ID sản phẩm không hợp lệ</div>
 
-        <div v-else-if="isLoading" class="loading">Loading...</div>
+        <div v-else-if="isLoading" class="loading">Đang tải...</div>
 
         <div v-else class="card table-container">
             <table>
@@ -209,29 +237,37 @@ onMounted(() => {
                     <tr>
                         <th>ID</th>
                         <th>SKU</th>
-                        <th>Size</th>
-                        <th>Color</th>
-                        <th>Price</th>
-                        <th>Stock</th>
-                        <th>Actions</th>
+                        <th>Kích thước</th>
+                        <th>Màu sắc</th>
+                        <th>Giá</th>
+                        <th>Kho</th>
+                        <th>Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="variant in filteredVariants" :key="variant.id">
                         <td>{{ variant.id }}</td>
-                        <td>{{ variant.sku }}</td>
+                        <td><span class="sku-badge">{{ variant.sku }}</span></td>
                         <td>{{ variant.sizeValue }}</td>
-                        <td>{{ variant.colorName }}</td>
-                        <td>${{ variant.price }}</td>
-                        <td>{{ variant.stockQuantity }}</td>
+                        <td>
+                          <div class="color-cell">
+                            {{ variant.colorName }}
+                          </div>
+                        </td>
+                        <td><span class="price-val">{{ variant.price.toLocaleString() }}đ</span></td>
+                        <td>
+                          <span class="badge" :class="variant.stockQuantity > 0 ? 'badge-success' : 'badge-danger'">
+                            {{ variant.stockQuantity }}
+                          </span>
+                        </td>
                         <td>
                             <button class="btn-text" @click="generateQR(variant)">QR</button>
-                            <button class="btn-text" @click="openForm(variant)">Edit</button>
-                            <button class="btn-text text-danger" @click="handleDelete(variant.id)">Delete</button>
+                            <button class="btn-text" @click="openForm(variant)">Sửa</button>
+                            <button class="btn-text text-danger" @click="handleDelete(variant.id)">Xóa</button>
                         </td>
                     </tr>
                     <tr v-if="filteredVariants.length === 0">
-                        <td colspan="7" class="text-center">No variants found.</td>
+                        <td colspan="7" class="text-center">Không tìm thấy phiên bản nào.</td>
                     </tr>
                 </tbody>
             </table>
@@ -240,21 +276,21 @@ onMounted(() => {
         <!-- Modal -->
         <div v-if="showForm" class="modal-overlay">
             <div class="modal card">
-                <h3>{{ editingVariant ? 'Edit Variant' : 'Add Variant' }}</h3>
+                <h3>{{ editingVariant ? 'Chỉnh sửa' : 'Thêm mới' }}</h3>
                 <form @submit.prevent="handleSubmit" class="form">
                     <div class="form-group">
                         <label for="sku">SKU</label>
-                        <input id="sku" v-model="formData.sku" type="text" required />
+                        <input id="sku" v-model="formData.sku" type="text" placeholder="Nhập SKU biến thể" required />
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="size">Size</label>
+                            <label for="size">Kích thước</label>
                             <select id="size" v-model="formData.sizeId" required>
                                 <option v-for="s in sizes" :key="s.id" :value="s.id">{{ s.sizeValue }}</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="color">Color</label>
+                            <label for="color">Màu sắc</label>
                             <select id="color" v-model="formData.colorId" required>
                                 <option v-for="c in colors" :key="c.id" :value="c.id">{{ c.colorName }}</option>
                             </select>
@@ -262,17 +298,17 @@ onMounted(() => {
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="price">Price</label>
+                            <label for="price">Giá bán</label>
                             <input id="price" v-model="formData.price" type="number" step="0.01" required />
                         </div>
                         <div class="form-group">
-                            <label for="stock">Stock</label>
+                            <label for="stock">Số lượng kho</label>
                             <input id="stock" v-model="formData.stockQuantity" type="number" required />
                         </div>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn" @click="closeForm">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                        <button type="button" class="btn" @click="closeForm">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Lưu</button>
                     </div>
                 </form>
             </div>
@@ -281,14 +317,19 @@ onMounted(() => {
         <!-- QR Modal -->
         <div v-if="showQRModal" class="modal-overlay" @click.self="showQRModal = false">
             <div class="modal card qr-modal">
-                <h3>QR Code: {{ selectedVariantQR?.sku }}</h3>
-                <p>{{ selectedVariantQR?.colorName }} - {{ selectedVariantQR?.sizeValue }}</p>
-                <div class="qr-container">
-                    <img :src="qrCodeUrl" alt="Product QR Code" />
+                <div class="modal-header">
+                  <h3>Mã QR: {{ selectedVariantQR?.sku }}</h3>
+                  <p>{{ selectedVariantQR?.colorName }} - {{ selectedVariantQR?.sizeValue }}</p>
                 </div>
-                <div class="form-actions">
-                    <button class="btn" @click="showQRModal = false">Close</button>
-                    <a :href="qrCodeUrl" download="qrcode.png" class="btn btn-primary">Download</a>
+                <div class="qr-container">
+                    <img :src="qrCodeUrl" alt="Mã QR sản phẩm" />
+                </div>
+                <div class="form-actions qr-actions">
+                    <button class="btn" @click="showQRModal = false">Đóng</button>
+                    <a :href="qrCodeUrl" download="qrcode.png" class="btn btn-primary">
+                      <i class="pi pi-download"></i>
+                      <span>Tải về</span>
+                    </a>
                 </div>
             </div>
         </div>
@@ -296,40 +337,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-
-.actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.search-input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    margin-right: 0.5rem;
-    min-width: 200px;
-}
-
-.filter-select {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    margin-right: 0.5rem;
-}
-
 .loading {
     text-align: center;
-    padding: 2rem;
+    padding: 3rem;
     color: var(--color-text-muted);
 }
 
@@ -341,7 +351,9 @@ onMounted(() => {
     background: none;
     border: none;
     color: var(--color-primary);
+    font-weight: 500;
     padding: 0 0.5rem;
+    font-size: 0.875rem;
 }
 
 .btn-text:hover {
@@ -352,13 +364,42 @@ onMounted(() => {
     color: var(--color-danger);
 }
 
+.sku-badge {
+    background: #f1f5f9;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: #475569;
+}
+
+.color-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.color-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+}
+
+.price-val {
+    font-weight: 600;
+    color: var(--color-text-main);
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -368,23 +409,43 @@ onMounted(() => {
 .modal {
     width: 100%;
     max-width: 500px;
+    animation: modal-in 0.3s ease-out;
+}
+
+@keyframes modal-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .qr-modal {
-    text-align: center;
+    max-width: 360px;
+}
+
+.qr-container {
+    padding: 1.5rem;
+    background: #f8fafc;
+    border-radius: 12px;
+    margin: 1.5rem 0;
+    display: flex;
+    justify-content: center;
 }
 
 .qr-container img {
     width: 200px;
     height: 200px;
-    margin: 1rem 0;
+    mix-blend-mode: multiply;
+}
+
+.qr-actions {
+  justify-content: center;
+  width: 100%;
 }
 
 .form {
-    margin-top: 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.25rem;
+    margin-top: 1.5rem;
 }
 
 .form-group {
@@ -399,11 +460,26 @@ onMounted(() => {
     gap: 1rem;
 }
 
-input,
-select {
-    padding: 0.625rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+input, select {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  transition: all 0.2s;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
 }
 
 .form-actions {
@@ -414,8 +490,29 @@ select {
 }
 
 .alert-error {
-    color: var(--color-danger);
+    background-color: #fef2f2;
+    color: #991b1b;
+    padding: 1rem;
+    border-radius: 8px;
     text-align: center;
     margin: 2rem;
+    border: 1px solid #fecaca;
+}
+
+/* Table Enhancements */
+.table-container {
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+table th {
+    background-color: #f9fafb;
+    padding: 1rem;
+}
+
+table td {
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--color-text-main);
 }
 </style>

@@ -7,6 +7,9 @@ import com.example.be.util.DtoMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,6 +25,16 @@ public class SupplierService {
         return supplierRepository.findAll().stream()
                 .map(dtoMapper::toSupplierDTO)
                 .collect(Collectors.toList());
+    }
+
+    public Page<SupplierDTO> getSuppliers(Pageable pageable) {
+        return supplierRepository.findAll(pageable)
+                .map(dtoMapper::toSupplierDTO);
+    }
+
+    public Page<SupplierDTO> searchSuppliers(String keyword, Pageable pageable) {
+        return supplierRepository.searchSuppliers(keyword, pageable)
+                .map(dtoMapper::toSupplierDTO);
     }
 
     public List<SupplierDTO> getActiveSuppliers() {

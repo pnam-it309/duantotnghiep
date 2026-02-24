@@ -91,9 +91,11 @@ const loadInitialData = async () => {
             productService.getAllProducts(),
             userService.getAllUsers()
         ]);
-        // Filter only active products
-        products.value = prodRes.data.filter(p => p.active);
-        users.value = userRes.data;
+        // Filter only active products - Handle paginated or array
+        const productList = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data as any).content;
+        products.value = productList.filter((p: any) => p.active);
+        
+        users.value = Array.isArray(userRes.data) ? userRes.data : (userRes.data as any).content;
     } catch (e) {
         console.error("Error loading POS data", e);
     } finally {
@@ -160,26 +162,26 @@ const applyCoupon = async () => {
         if (res.data) {
             // Validate expiry
             if (res.data.expiryDate && new Date(res.data.expiryDate) < new Date()) {
-                alert("Coupon expired");
+                alert("Mã giảm giá đã hết hạn");
                 return;
             }
             appliedCoupon.value = res.data;
         } else {
-            alert("Coupon not found");
+            alert("Không tìm thấy mã giảm giá");
         }
     } catch (e) {
         console.error("Invalid coupon", e);
-        alert("Invalid coupon code");
+        alert("Mã giảm giá không hợp lệ");
     }
 };
 
 const checkout = async () => {
     if (cart.value.length === 0) {
-        alert("Cart is empty");
+        alert("Giỏ hàng đang trống");
         return;
     }
     if (!selectedUser.value) {
-        alert("Please select a customer");
+        alert("Vui lòng chọn khách hàng");
         return;
     }
 
@@ -207,7 +209,7 @@ const checkout = async () => {
 
     try {
         await orderService.createOrder(payload);
-        alert("Order created successfully!");
+        alert("Đơn hàng đã được tạo thành công!");
         // Reset
         cart.value = [];
         appliedCoupon.value = null;
@@ -216,7 +218,7 @@ const checkout = async () => {
         selectedUser.value = null;
     } catch (e) {
         console.error("Checkout failed", e);
-        alert("Checkout failed. See console.");
+        alert("Thanh toán thất bại. Vui lòng kiểm tra lại.");
     }
 };
 
@@ -246,7 +248,7 @@ const onScanSuccess = async (decodedText: string) => {
                 let prod = products.value.find(p => p.id === res.data.productId);
 
                 addToCart(res.data, prod);
-                alert(`Added ${prod?.name || 'Item'} to cart!`);
+                alert(`Đã thêm ${prod?.name || 'sản phẩm'} vào giỏ hàng!`);
                 closeScanner();
             }
         }
@@ -276,24 +278,43 @@ onBeforeUnmount(() => {
     <div class="pos-layout">
         <!-- Left: Product Grid -->
         <div class="products-section">
-            <div class="section-header">
-                <h2>Products</h2>
+            <div class="page-header pos-header">
+                <div class="page-title">
+                    <h2>Danh mục sản phẩm</h2>
+                </div>
                 <div class="header-actions">
-                    <input type="text" v-model="searchQuery" placeholder="Search products..." class="search-input" />
-                    <button class="btn btn-secondary" @click="openScanner">📷 Scan QR</button>
+                    <div class="search-wrapper">
+                        <i class="pi pi-search search-icon"></i>
+                        <input type="text" v-model="searchQuery" placeholder="Tìm tên, danh mục, thương hiệu..." class="search-input" />
+                    </div>
+                    <button class="btn btn-outline" @click="openScanner">
+                        <i class="pi pi-qrcode"></i>
+                        <span>Quét mã</span>
+                    </button>
                 </div>
             </div>
 
-            <div v-if="isLoadingProducts" class="loading">Loading Products...</div>
+            <div v-if="isLoadingProducts" class="loading">
+                <div class="loader"></div>
+                <span>Đang tải sản phẩm...</span>
+            </div>
 
-            <div v-else class="products-grid">
+            <div v-else class="products-grid custom-scrollbar">
                 <div v-for="product in filteredProducts" :key="product.id" class="product-card card"
                     @click="openProductModal(product)">
-                    <div class="product-icon">📦</div>
+                    <div class="product-image">
+                        <i class="pi pi-package"></i>
+                    </div>
                     <div class="product-info">
                         <h3>{{ product.name }}</h3>
-                        <p>{{ product.categoryName }}</p>
-                        <p>{{ product.brandName }}</p>
+                        <div class="product-meta">
+                            <span class="category-tag">{{ product.categoryName }}</span>
+                            <span class="brand-tag">{{ product.brandName }}</span>
+                        </div>
+                    </div>
+                    <div class="product-overlay">
+                        <i class="pi pi-plus"></i>
+                        <span>Chọn mẫu</span>
                     </div>
                 </div>
             </div>
@@ -301,114 +322,180 @@ onBeforeUnmount(() => {
 
         <!-- Right: Cart & Checkout -->
         <div class="cart-section card">
-            <h2>Current Order</h2>
+            <div class="cart-header">
+                <h3>Đơn hàng hiện tại</h3>
+                <span class="item-count">{{ cart.length }} món</span>
+            </div>
 
-            <div class="customer-select">
-                <label>Customer</label>
-                <select v-model="selectedUser">
-                    <option :value="null">Select Customer...</option>
-                    <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }} ({{ u.email }})</option>
-                </select>
-                <div v-if="selectedCustomerInfo" class="customer-loyalty-info">
-                    <span class="badge" :class="selectedCustomerInfo.membershipTier?.toLowerCase() || 'silver'">
-                        {{ selectedCustomerInfo.membershipTier || 'SILVER' }}
-                    </span>
-                    <span class="points">💎 {{ selectedCustomerInfo.rewardPoints || 0 }} pts</span>
+            <div class="customer-selection">
+                <div class="form-group">
+                    <label>Khách hàng thành viên</label>
+                    <div class="select-wrapper">
+                      <select v-model="selectedUser" class="filter-select">
+                          <option :value="null">Khách lẻ / Chọn thành viên...</option>
+                          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }} ({{ u.email }})</option>
+                      </select>
+                      <i class="pi pi-chevron-down select-icon"></i>
+                    </div>
+                </div>
+                
+                <div v-if="selectedCustomerInfo" class="customer-profile">
+                    <div class="profile-avatar">
+                        {{ selectedCustomerInfo.username?.charAt(0).toUpperCase() }}
+                    </div>
+                    <div class="profile-info">
+                        <div class="name-row">
+                            <strong>{{ selectedCustomerInfo.username }}</strong>
+                            <span class="badge" :class="selectedCustomerInfo.membershipTier?.toLowerCase() || 'silver'">
+                                {{ selectedCustomerInfo.membershipTier || 'SILVER' }}
+                            </span>
+                        </div>
+                        <span class="points"><i class="pi pi-star-fill"></i> {{ selectedCustomerInfo.rewardPoints || 0 }} điểm tích lũy</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="cart-items">
-                <div v-if="cart.length === 0" class="empty-cart">Cart is empty</div>
+            <div class="cart-items custom-scrollbar">
+                <div v-if="cart.length === 0" class="empty-cart">
+                    <i class="pi pi-shopping-cart"></i>
+                    <p>Giỏ hàng đang trống</p>
+                </div>
                 <div v-for="item in cart" :key="item.variantId" class="cart-item">
-                    <div class="item-details">
-                        <strong>{{ item.productName }}</strong>
-                        <small>{{ item.color }} / {{ item.size }}</small>
-                        <span>${{ item.price }}</span>
+                    <div class="item-main">
+                        <div class="item-info">
+                            <strong>{{ item.productName }}</strong>
+                            <div class="item-spec">
+                                <span class="spec-label">{{ item.color }}</span>
+                                <span class="spec-divider">|</span>
+                                <span class="spec-label">{{ item.size }}</span>
+                            </div>
+                        </div>
+                        <div class="item-pricing">
+                            <span class="unit-price">{{ item.price.toLocaleString() }}đ</span>
+                            <div class="quantity-controls">
+                                <button class="btn-qty" @click="adjustQuantity(item, -1)"><i class="pi pi-minus"></i></button>
+                                <span class="qty-value">{{ item.quantity }}</span>
+                                <button class="btn-qty" @click="adjustQuantity(item, 1)"><i class="pi pi-plus"></i></button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="item-actions">
-                        <button class="btn-sm" @click="adjustQuantity(item, -1)">-</button>
-                        <span>{{ item.quantity }}</span>
-                        <button class="btn-sm" @click="adjustQuantity(item, 1)">+</button>
-                    </div>
-                    <div class="item-total">
-                        ${{ item.price * item.quantity }}
+                    <div class="item-total-price">
+                        {{ (item.price * item.quantity).toLocaleString() }}đ
                     </div>
                 </div>
             </div>
 
-            <div class="cart-footer">
-                <div class="coupon-area">
-                    <input v-model="couponCode" placeholder="Coupon Code" :disabled="!!appliedCoupon" />
-                    <button v-if="!appliedCoupon" @click="applyCoupon" class="btn">Apply</button>
-                    <button v-else @click="removeCoupon" class="btn text-danger">Remove</button>
+            <div class="cart-summary">
+                <div class="coupon-section">
+                    <div class="coupon-input">
+                      <input v-model="couponCode" placeholder="Nhập mã khuyến mãi" :disabled="!!appliedCoupon" />
+                      <button v-if="!appliedCoupon" @click="applyCoupon" class="btn btn-outline btn-sm">Áp dụng</button>
+                      <button v-else @click="removeCoupon" class="btn btn-text text-danger btn-sm">Gỡ</button>
+                    </div>
                 </div>
 
-                <div class="points-area" v-if="selectedCustomerInfo && selectedCustomerInfo.rewardPoints > 0">
-                    <div class="points-input-group">
-                        <label>Use Points (Max: {{ selectedCustomerInfo.rewardPoints }})</label>
+                <div class="points-redemption" v-if="selectedCustomerInfo && selectedCustomerInfo.rewardPoints > 0">
+                    <div class="redemption-control">
+                        <div class="redemption-info">
+                            <label>Dùng điểm tích lũy</label>
+                            <small>Sử dụng tối đa {{ selectedCustomerInfo.rewardPoints }}đ</small>
+                        </div>
                         <input type="number" v-model.number="pointsToUse" min="0"
                             :max="selectedCustomerInfo.rewardPoints" class="points-input" />
-                        <span class="points-value">-{{ pointsToUse * 1000 }} VND</span>
                     </div>
                 </div>
 
-                <div class="totals">
-                    <div class="row"><span>Subtotal:</span> <span>${{ subtotal }}</span></div>
-                    <div class="row text-success"><span>Discount:</span> <span>-${{ discountAmount }}</span></div>
-                    <div class="row total"><span>Total:</span> <span>${{ finalTotal }}</span></div>
+                <div class="bill-details">
+                    <div class="bill-row">
+                        <span>Tạm tính</span>
+                        <span>{{ subtotal.toLocaleString() }}đ</span>
+                    </div>
+                    <div class="bill-row promo" v-if="discountAmount > 0">
+                        <span>Khuyến mãi</span>
+                        <span>-{{ discountAmount.toLocaleString() }}đ</span>
+                    </div>
+                    <div class="bill-row points" v-if="pointsDiscountAmount > 0">
+                        <span>Dùng điểm</span>
+                        <span>-{{ pointsDiscountAmount.toLocaleString() }}đ</span>
+                    </div>
+                    <div class="bill-total">
+                        <span>TỔNG CỘNG</span>
+                        <span>{{ finalTotal.toLocaleString() }}đ</span>
+                    </div>
                 </div>
 
-                <button class="btn btn-primary btn-block pay-btn" @click="checkout" :disabled="cart.length === 0">
-                    PAY ${{ finalTotal }}
+                <button class="btn btn-primary btn-block checkout-btn" @click="checkout" :disabled="cart.length === 0">
+                    <i class="pi pi-check-circle"></i>
+                    <span>THANH TOÁN</span>
                 </button>
             </div>
         </div>
 
         <!-- Variant Selection Modal -->
-        <div v-if="showVariantModal" class="modal-overlay" @click.self="showVariantModal = false">
-            <div class="modal card">
-                <h3>Select Variant: {{ selectedProduct?.name }}</h3>
+        <div v-if="showVariantModal" class="modal-overlay">
+            <div class="modal card variant-modal">
+                <div class="modal-header">
+                    <h3>{{ selectedProduct?.name }}</h3>
+                    <p>Vui lòng chọn phiên bản để thêm vào giỏ hàng</p>
+                </div>
 
-                <div v-if="isLoadingVariants">Loading Options...</div>
-                <div v-else-if="currentVariants.length === 0">No variants available for this product.</div>
+                <div v-if="isLoadingVariants" class="modal-loading">
+                   <div class="loader sm"></div>
+                </div>
+                
+                <div v-else-if="currentVariants.length === 0" class="modal-empty">
+                    Không có phiên bản nào cho sản phẩm này.
+                </div>
 
-                <div v-else class="variants-list">
-                    <div v-for="variant in currentVariants" :key="variant.id" class="variant-option"
-                        @click="addToCart(variant)">
-                        <span class="v-info">{{ variant.colorName }} - {{ variant.sizeValue }}</span>
-                        <span class="v-price">${{ variant.price }}</span>
-                        <span class="v-stock">Stock: {{ variant.stockQuantity }}</span>
-                        <span class="v-sku">SKU: {{ variant.sku }}</span>
+                <div v-else class="variants-selection-list custom-scrollbar">
+                    <div v-for="variant in currentVariants" :key="variant.id" class="variant-card"
+                        :class="{ 'out-of-stock': variant.stockQuantity <= 0 }"
+                        @click="variant.stockQuantity > 0 && addToCart(variant)">
+                        <div class="variant-primary">
+                            <span class="variant-name">{{ variant.colorName }} / {{ variant.sizeValue }}</span>
+                            <span class="variant-sku">{{ variant.sku }}</span>
+                        </div>
+                        <div class="variant-secondary">
+                            <span class="variant-price">{{ variant.price.toLocaleString() }}đ</span>
+                            <span class="variant-stock" :class="{ 'warning': variant.stockQuantity < 10 }">
+                                Kho: {{ variant.stockQuantity }}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
                 <div class="form-actions">
-                    <button class="btn" @click="showVariantModal = false">Cancel</button>
+                    <button class="btn" @click="showVariantModal = false">Đóng</button>
                 </div>
             </div>
         </div>
 
         <!-- Scanner Modal -->
-        <div v-if="showScanner" class="modal-overlay" @click.self="closeScanner">
+        <div v-if="showScanner" class="modal-overlay">
             <div class="modal card scanner-modal">
-                <h3>Scan Product QR</h3>
-                <div id="qr-reader" style="width: 100%;"></div>
+                <div class="modal-header">
+                    <h3>Quét mã QR sản phẩm</h3>
+                    <p>Đặt mã QR vào khung hình để tự động thêm sản phẩm</p>
+                </div>
+                <div id="qr-reader-container">
+                    <div id="qr-reader"></div>
+                </div>
                 <div class="form-actions">
-                    <button class="btn" @click="closeScanner">Close</button>
+                    <button class="btn btn-primary" @click="closeScanner">Hoàn tất</button>
                 </div>
             </div>
         </div>
-
     </div>
 </template>
 
 <style scoped>
 .pos-layout {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 1fr 400px;
     gap: 1.5rem;
-    height: calc(100vh - 100px);
+    height: calc(100vh - 40px);
     overflow: hidden;
+    padding: 0.5rem;
 }
 
 .products-section {
@@ -417,346 +504,542 @@ onBeforeUnmount(() => {
     overflow: hidden;
 }
 
-.section-header {
-    margin-bottom: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
+.pos-header {
+    margin-bottom: 1.5rem;
 }
 
 .header-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: 1rem;
     align-items: center;
-}
-
-.search-input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    min-width: 200px;
 }
 
 .products-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1.25rem;
     overflow-y: auto;
+    padding-right: 0.5rem;
     padding-bottom: 2rem;
 }
 
 .product-card {
     cursor: pointer;
-    transition: transform 0.1s, box-shadow 0.1s;
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+    height: 220px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 1rem;
-    height: 100%;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .product-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-4px);
     border-color: var(--color-primary);
+    box-shadow: 0 12px 20px -10px rgba(0, 0, 0, 0.1);
 }
 
-.product-icon {
+.product-image {
+    height: 120px;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 2.5rem;
-    margin-bottom: 0.5rem;
+    color: #cbd5e1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.product-info {
+    padding: 1rem;
+    flex: 1;
 }
 
 .product-info h3 {
-    font-size: 1rem;
-    margin: 0 0 0.5rem 0;
-    color: var(--color-heading);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
-.product-info p {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
+.product-meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
+.category-tag, .brand-tag {
+    font-size: 0.75rem;
+    padding: 0.125rem 0.375rem;
+    background: #f1f5f9;
+    color: #64748b;
+    border-radius: 4px;
+}
+
+.product-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(220, 38, 38, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    gap: 0.5rem;
+}
+
+.product-card:hover .product-overlay {
+    opacity: 1;
+}
+
+.product-overlay i {
+    font-size: 1.5rem;
+}
+
+.product-overlay span {
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+/* Cart Section */
 .cart-section {
     display: flex;
     flex-direction: column;
     height: 100%;
+    padding: 0;
+    overflow: hidden;
 }
 
-.customer-select {
-    margin-bottom: 1rem;
+.cart-header {
+    padding: 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.customer-select select {
-    width: 100%;
-    padding: 0.5rem;
-    margin-top: 0.25rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-color);
+.cart-header h3 {
+    font-size: 1.125rem;
+    font-weight: 700;
 }
 
-.customer-loyalty-info {
+.item-count {
+    font-size: 0.8125rem;
+    padding: 0.25rem 0.625rem;
+    background: #f1f5f9;
+    border-radius: 12px;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.customer-selection {
+    padding: 1.25rem;
+    background: #fcfcfc;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.customer-profile {
+    margin-top: 1rem;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-    font-size: 0.9rem;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
 }
 
-.badge {
-    padding: 0.2rem 0.5rem;
-    border-radius: 99px;
-    font-weight: bold;
+.profile-avatar {
+    width: 40px;
+    height: 40px;
+    background: var(--color-primary);
     color: white;
-    font-size: 0.75rem;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.125rem;
 }
 
-.badge.silver {
-    background: #6c757d;
+.profile-info {
+    flex: 1;
 }
 
-.badge.gold {
-    background: #ffc107;
-    color: black;
+.name-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.125rem;
 }
 
-.badge.diamond {
-    background: #6f42c1;
+.name-row strong {
+    font-size: 0.9375rem;
 }
 
 .points {
-    color: var(--color-primary);
+    font-size: 0.75rem;
+    color: #dc2626;
     font-weight: 600;
 }
 
 .cart-items {
     flex: 1;
     overflow-y: auto;
-    border-top: 1px solid var(--border-color);
-    border-bottom: 1px solid var(--border-color);
-    padding: 1rem 0;
+    padding: 0.5rem 1.25rem;
 }
 
 .empty-cart {
-    text-align: center;
-    color: var(--color-text-muted);
-    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 0;
+    color: #cbd5e1;
+}
+
+.empty-cart i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
 }
 
 .cart-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 0;
+    padding: 1rem 0;
     border-bottom: 1px dashed var(--border-color);
 }
 
-.item-details {
-    display: flex;
-    flex-direction: column;
-}
-
-.item-details strong {
-    font-size: 0.9rem;
-}
-
-.item-details small {
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-}
-
-.item-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.btn-sm {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border: 1px solid var(--border-color);
-    background: var(--color-surface);
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.btn-sm:hover {
-    background: var(--color-background);
-}
-
-.item-total {
-    font-weight: 600;
-    min-width: 60px;
-    text-align: right;
-}
-
-.cart-footer {
-    padding-top: 1rem;
-}
-
-.coupon-area {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-}
-
-.coupon-area input {
-    flex: 1;
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-}
-
-.points-area {
-    margin-bottom: 1rem;
-    padding: 0.5rem;
-    background-color: #f8f9fa;
-    border-radius: var(--radius-md);
-    border: 1px dashed var(--color-primary);
-}
-
-.points-input-group {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    justify-content: space-between;
-}
-
-.points-input-group label {
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.points-input {
-    width: 60px;
-    padding: 0.25rem;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    text-align: right;
-}
-
-.points-value {
-    color: var(--color-danger);
-    font-weight: bold;
-    font-size: 0.9rem;
-}
-
-.totals .row {
+.item-main {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     margin-bottom: 0.5rem;
 }
 
-.totals .total {
-    font-size: 1.25rem;
+.item-info {
+    flex: 1;
+}
+
+.item-info strong {
+    font-size: 0.875rem;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.item-spec {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+.spec-divider {
+    margin: 0 0.375rem;
+    opacity: 0.5;
+}
+
+.item-pricing {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.unit-price {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+}
+
+.quantity-controls {
+    display: flex;
+    align-items: center;
+    background: #f1f5f9;
+    border-radius: 6px;
+    padding: 2px;
+}
+
+.btn-qty {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: white;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.qty-value {
+    width: 32px;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.item-total-price {
+    text-align: right;
     font-weight: 700;
-    color: var(--color-primary);
-    border-top: 2px solid var(--border-color);
-    padding-top: 0.5rem;
-    margin-top: 0.5rem;
+    font-size: 0.9375rem;
 }
 
-.pay-btn {
-    margin-top: 1rem;
-    height: 3rem;
-    font-size: 1.1rem;
+.cart-summary {
+    padding: 1.25rem;
+    background: #f8fafc;
+    border-top: 1px solid var(--border-color);
 }
 
-.btn-block {
-    width: 100%;
+.coupon-section {
+    margin-bottom: 1rem;
 }
 
-.text-success {
-    color: var(--color-secondary);
+.coupon-input {
+    display: flex;
+    gap: 0.5rem;
 }
 
-.text-danger {
-    color: var(--color-danger);
+.coupon-input input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.875rem;
 }
 
-/* Modal */
+.points-redemption {
+    padding: 0.75rem;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+}
+
+.redemption-control {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.redemption-info label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    display: block;
+}
+
+.redemption-info small {
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+}
+
+.points-input {
+    width: 70px;
+    padding: 0.375rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    text-align: right;
+    font-weight: 700;
+}
+
+.bill-details {
+    margin-bottom: 1.25rem;
+}
+
+.bill-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+    color: var(--color-text-muted);
+}
+
+.bill-row.promo, .bill-row.points {
+    color: #ef4444;
+}
+
+.bill-total {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.125rem;
+    font-weight: 800;
+    color: var(--color-text-main);
+    padding-top: 0.75rem;
+    border-top: 2px solid #e2e8f0;
+    margin-top: 0.75rem;
+}
+
+.checkout-btn {
+    height: 52px;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+/* Modals */
 .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(8px);
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     z-index: 2000;
 }
 
-.modal {
-    width: 100%;
-    max-width: 500px;
+.variant-modal {
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
 }
 
-.scanner-modal {
-    max-width: 400px;
+.modal-header {
+    margin-bottom: 1.5rem;
 }
 
-.variants-list {
-    display: grid;
-    gap: 0.5rem;
-    max-height: 400px;
-    overflow-y: auto;
-    margin-top: 1rem;
+.modal-header h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
 }
 
-.variant-option {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    align-items: center;
-}
-
-.variant-option:hover {
-    background-color: #EEF2FF;
-    border-color: var(--color-primary);
-}
-
-.v-price {
-    font-weight: bold;
-    color: var(--color-primary);
-}
-
-.v-stock {
-    font-size: 0.85rem;
+.modal-header p {
     color: var(--color-text-muted);
+    font-size: 0.875rem;
 }
 
-.v-sku {
-    font-family: monospace;
-    font-size: 0.85rem;
-}
-
-.btn-secondary {
-    background-color: var(--color-surface);
-    border: 1px solid var(--border-color);
-    color: var(--color-primary);
-}
-
-.header-actions .btn {
-    margin-left: 1rem;
-}
-
-.form-actions {
-    display: flex;
-    justify-content: flex-end;
+.variants-selection-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.variant-card {
+    padding: 1rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.variant-card:hover:not(.out-of-stock) {
+    background: white;
+    border-color: var(--color-primary);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.variant-card.out-of-stock {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f1f5f9;
+}
+
+.variant-name {
+    display: block;
+    font-weight: 700;
+    font-size: 0.9375rem;
+    margin-bottom: 0.125rem;
+}
+
+.variant-sku {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748b;
+    font-family: monospace;
+}
+
+.variant-secondary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-top: 1rem;
+}
+
+.variant-price {
+    font-weight: 800;
+    color: var(--color-text-main);
+}
+
+.variant-stock {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #10b981;
+}
+
+.variant-stock.warning {
+    color: #f59e0b;
+}
+
+/* Scanner */
+.scanner-modal {
+    max-width: 450px;
+}
+
+#qr-reader-container {
+    background: #000;
+    border-radius: 16px;
+    overflow: hidden;
+    margin: 1.5rem 0;
+}
+
+#qr-reader {
+  border: none !important;
+}
+
+.loader {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@media (max-width: 1024px) {
+    .pos-layout { grid-template-columns: 1fr; overflow-y: auto; height: auto; }
+    .cart-section { height: auto; }
+    .products-grid { height: auto; overflow-y: visible; }
 }
 </style>

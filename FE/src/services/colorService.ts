@@ -8,7 +8,10 @@ export interface ColorDTO {
 
 export default {
   getAllColors() {
-    return apiClient.get<ColorDTO[]>('/colors');
+    return apiClient.get<ColorDTO[]>('/colors/all');
+  },
+  getColors(params?: any) {
+    return apiClient.get('/colors', { params });
   },
   getColorById(id: number) {
     return apiClient.get<ColorDTO>(`/colors/${id}`);

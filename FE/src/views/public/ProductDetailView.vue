@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import productService, { type ProductDTO } from '../../services/productService';
 import productVariantService, { type ProductVariantDTO } from '../../services/productVariantService';
 import { useCartStore } from '../../stores/cartStore';
+import ProductReviews from '../../components/ProductReviews.vue';
 
 const route = useRoute();
 const cartStore = useCartStore();
@@ -17,18 +18,24 @@ const selectedColorId = ref<number | null>(null);
 const selectedSizeId = ref<number | null>(null);
 const quantity = ref(1);
 
+// Recommendations
+const recommendations = ref<ProductDTO[]>([]);
+
 const loadData = async () => {
     const id = Number(route.params.id);
     if (!id) return;
 
     isLoading.value = true;
+    window.scrollTo(0, 0); // Scroll top on route change
     try {
-        const [pRes, vRes] = await Promise.all([
+        const [pRes, vRes, rRes] = await Promise.all([
             productService.getProductById(id),
-            productVariantService.getVariantsByProduct(id)
+            productVariantService.getVariantsByProduct(id),
+            api.get('/products/recommendations', { params: { type: 'similar', productId: id } })
         ]);
         product.value = pRes.data;
         variants.value = vRes.data;
+        recommendations.value = rRes.data;
 
         // Pre-select first available option
         if (variants.value.length > 0 && variants.value[0]) {
@@ -54,7 +61,7 @@ const colors = computed(() => {
     return Array.from(map.values());
 });
 
-// Unique Sizes (filtered by selected color if necessary, or just unique list)
+// Unique Sizes
 const sizes = computed(() => {
     const map = new Map();
     variants.value.forEach(v => {
@@ -77,6 +84,13 @@ const canAddToCart = computed(() => {
     return selectedVariant.value && selectedVariant.value.stockQuantity > 0;
 });
 
+const stockLabel = computed(() => {
+    if (!selectedVariant.value) return '';
+    return selectedVariant.value.stockQuantity > 0
+        ? `In Stock (${selectedVariant.value.stockQuantity})`
+        : 'Out of Stock';
+});
+
 const addToCart = () => {
     if (!selectedVariant.value || !product.value) return;
 
@@ -92,6 +106,7 @@ const addToCart = () => {
     alert('Added to cart');
 };
 
+watch(() => route.params.id, loadData);
 onMounted(loadData);
 </script>
 
@@ -114,8 +129,7 @@ onMounted(loadData);
                 <div class="price-section" v-if="selectedVariant">
                     <span class="price">${{ selectedVariant.price.toLocaleString() }}</span>
                     <span class="stock" :class="{ 'in-stock': selectedVariant.stockQuantity > 0 }">
-                        {{ selectedVariant.stockQuantity > 0 ? `In Stock (${selectedVariant.stockQuantity})` : 'Out of
-                        Stock' }}
+                        {{ stockLabel }}
                     </span>
                 </div>
                 <div class="price-section" v-else>
@@ -157,6 +171,23 @@ onMounted(loadData);
                     <button class="btn-add-cart" :disabled="!canAddToCart" @click="addToCart">
                         {{ canAddToCart ? 'Add to Cart' : 'Out of Stock' }}
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <ProductReviews :productId="product.id" />
+
+        <!-- AI Recommendations -->
+        <div class="recommendations-section" v-if="recommendations.length > 0">
+            <h2>You might also like (AI Recommended)</h2>
+            <div class="rec-grid">
+                <div v-for="rec in recommendations" :key="rec.id" class="rec-card"
+                    @click="router.push(`/products/${rec.id}`)">
+                    <div class="rec-img">{{ rec.name.charAt(0) }}</div>
+                    <div class="rec-info">
+                        <h3>{{ rec.name }}</h3>
+                        <div class="rec-price">${{ rec.startPrice ? rec.startPrice.toLocaleString() : 'N/A' }}</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -218,7 +249,7 @@ onMounted(loadData);
 .price {
     font-size: 2rem;
     font-weight: 700;
-    color: #4f46e5;
+    color: var(--color-primary);
 }
 
 .stock {
@@ -262,13 +293,13 @@ onMounted(loadData);
 }
 
 .option-btn:hover {
-    border-color: #4f46e5;
+    border-color: var(--color-primary);
 }
 
 .option-btn.active {
-    background: #4f46e5;
+    background: var(--color-primary);
     color: white;
-    border-color: #4f46e5;
+    border-color: var(--color-primary);
 }
 
 .actions {
@@ -303,7 +334,7 @@ onMounted(loadData);
 
 .btn-add-cart {
     flex: 1;
-    background: #4f46e5;
+    background: var(--color-primary);
     color: white;
     border: none;
     padding: 1rem;
@@ -320,12 +351,65 @@ onMounted(loadData);
 }
 
 .btn-add-cart:hover:not(:disabled) {
-    background: #4338ca;
+    background: var(--color-primary-hover);
 }
 
 @media (max-width: 768px) {
     .grid {
         grid-template-columns: 1fr;
     }
+}
+
+.recommendations-section {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.rec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.rec-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.rec-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.rec-img {
+    height: 150px;
+    background: #f3f4f6;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    color: #d1d5db;
+}
+
+.rec-info {
+    padding: 1rem;
+}
+
+.rec-info h3 {
+    font-size: 1rem;
+    margin: 0 0 0.5rem 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rec-price {
+    font-weight: bold;
+    color: var(--color-primary);
 }
 </style>

@@ -1,47 +1,54 @@
 <script setup lang="ts">
 import { useCartStore } from '../../stores/cartStore';
 import { useRouter } from 'vue-router';
-import { computed } from 'vue';
-import orderService from '../../services/orderService'; // You might need a public order service or allow creating orders without auth if backend supports it. Assuming backend requires known user.
+import { ref } from 'vue';
+import api from '../../services/api';
 
 const cartStore = useCartStore();
 const router = useRouter();
 
+const couponCodeInput = ref('');
+const isValidating = ref(false);
+const couponMessage = ref('');
+const isError = ref(false);
+
+const handleApplyCoupon = async () => {
+    if (!couponCodeInput.value) return;
+
+    isValidating.value = true;
+    couponMessage.value = '';
+    isError.value = false;
+
+    try {
+        const res = await api.get('/coupons/validate', {
+            params: {
+                code: couponCodeInput.value,
+                orderValue: cartStore.subtotal
+            }
+        });
+
+        if (res.data.valid) {
+            cartStore.applyCoupon(couponCodeInput.value, res.data.coupon.id, res.data.discountAmount);
+            couponMessage.value = `Coupon applied! Saved $${res.data.discountAmount}`;
+            couponCodeInput.value = '';
+        }
+    } catch (e: any) {
+        isError.value = true;
+        couponMessage.value = e.response?.data?.message || 'Invalid coupon';
+    } finally {
+        isValidating.value = false;
+    }
+};
+
 const checkout = async () => {
-    // For MVP, since we don't have real Auth, redirect to Login if no User ID in localStorage
-    // Simulating Auth: Check localStorage 'userId'
     const userId = localStorage.getItem('userId');
     if (!userId) {
         router.push('/login?redirect=/cart');
         return;
     }
-
-    // Create Order
-    try {
-        const orderPayload = {
-            user: { id: parseInt(userId) },
-            subtotal: cartStore.totalAmount,
-            discountTotal: 0,
-            finalTotal: cartStore.totalAmount,
-            status: 'PENDING'
-        };
-
-        const itemsPayload = cartStore.items.map(item => ({
-            productVariant: { id: item.variantId },
-            quantity: item.quantity,
-            price: item.price
-        }));
-
-        await orderService.createOrder({ order: orderPayload, items: itemsPayload });
-
-        cartStore.clearCart();
-        alert("Order placed successfully!");
-        router.push('/');
-    } catch (e) {
-        console.error("Checkout failed", e);
-        alert("Checkout failed");
-    }
+    router.push('/checkout');
 };
+
 </script>
 
 <template>
@@ -75,8 +82,30 @@ const checkout = async () => {
                 <h2>Summary</h2>
                 <div class="summary-row">
                     <span>Subtotal</span>
-                    <span>${{ cartStore.totalAmount.toLocaleString() }}</span>
+                    <span>${{ cartStore.subtotal.toLocaleString() }}</span>
                 </div>
+
+                <div class="coupon-section">
+                    <div v-if="cartStore.couponCode" class="applied-coupon">
+                        <span>Coupon: {{ cartStore.couponCode }}</span>
+                        <button @click="cartStore.removeCoupon" class="btn-remove-coupon">Remove</button>
+                    </div>
+                    <div v-else class="coupon-input">
+                        <input v-model="couponCodeInput" placeholder="Enter code" />
+                        <button @click="handleApplyCoupon" :disabled="isValidating">
+                            {{ isValidating ? '...' : 'Apply' }}
+                        </button>
+                    </div>
+                    <div v-if="couponMessage" class="coupon-message" :class="{ error: isError }">
+                        {{ couponMessage }}
+                    </div>
+                </div>
+
+                <div v-if="cartStore.discountAmount > 0" class="summary-row discount">
+                    <span>Discount</span>
+                    <span>-${{ cartStore.discountAmount.toLocaleString() }}</span>
+                </div>
+
                 <div class="summary-row total">
                     <span>Total</span>
                     <span>${{ cartStore.totalAmount.toLocaleString() }}</span>
@@ -100,7 +129,7 @@ const checkout = async () => {
 
 .btn-primary {
     display: inline-block;
-    background: #4f46e5;
+    background: var(--color-primary);
     color: white;
     padding: 0.8rem 1.5rem;
     border-radius: 6px;
@@ -171,7 +200,7 @@ const checkout = async () => {
     flex: 1;
     text-align: right;
     font-weight: bold;
-    color: #4f46e5;
+    color: var(--color-primary);
 }
 
 .btn-remove {
@@ -208,7 +237,7 @@ const checkout = async () => {
 
 .btn-checkout {
     width: 100%;
-    background: #4f46e5;
+    background: var(--color-primary);
     color: white;
     border: none;
     padding: 1rem;
@@ -220,7 +249,7 @@ const checkout = async () => {
 }
 
 .btn-checkout:hover {
-    background: #4338ca;
+    background: var(--color-primary-hover);
 }
 
 @media (max-width: 768px) {

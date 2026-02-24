@@ -1,9 +1,8 @@
 package com.example.be.service;
 
-import com.example.be.entity.LoyaltyLog;
-import com.example.be.entity.Order;
+import com.example.be.entity.LoyaltyProgram;
 import com.example.be.entity.User;
-import com.example.be.repository.LoyaltyLogRepository;
+import com.example.be.repository.LoyaltyRepository;
 import com.example.be.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,81 +13,69 @@ import java.math.BigDecimal;
 @Service
 @RequiredArgsConstructor
 public class LoyaltyService {
+
+    private final LoyaltyRepository loyaltyRepository;
     private final UserRepository userRepository;
-    private final LoyaltyLogRepository loyaltyLogRepository;
-
-    private static final int POINTS_PER_CURRENCY_UNIT = 1000; // 1000 VND = 1 Point
 
     @Transactional
-    public void processOrderCompletion(Order order) {
-        if (order.getUser() == null)
-            return;
+    public void addPoints(Long userId, BigDecimal orderTotal) {
+        LoyaltyProgram lp = loyaltyRepository.findByUserId(userId)
+                .orElseGet(() -> {
+                    User user = userRepository.findById(userId).orElseThrow();
+                    return LoyaltyProgram.builder()
+                            .user(user)
+                            .points(0)
+                            .tierLevel("BRONZE")
+                            .build();
+                });
 
-        User user = order.getUser();
+        // 1000 VND = 1 point
+        int earnedPoints = orderTotal.divideToIntegralValue(new BigDecimal("1000")).intValue();
+        lp.setPoints(lp.getPoints() + earnedPoints);
 
-        // Calculate Points: Final Total / 1000
-        int pointsEarned = order.getFinalTotal().divide(new BigDecimal(POINTS_PER_CURRENCY_UNIT)).intValue();
+        updateTier(lp);
 
-        if (pointsEarned > 0) {
-            // Update User Points
-            user.setRewardPoints(user.getRewardPoints() + pointsEarned);
-
-            // Check Tier Upgrade
-            updateMembershipTier(user);
-
-            userRepository.save(user);
-
-            // Create Log
-            LoyaltyLog log = LoyaltyLog.builder()
-                    .user(user)
-                    .order(order)
-                    .points(pointsEarned)
-                    .reason("Order #" + order.getId() + " Reward")
-                    .build();
-            loyaltyLogRepository.save(log);
-        }
+        loyaltyRepository.save(lp);
     }
 
-    private void updateMembershipTier(User user) {
-        // Simple logic based on current points (accumulated total would be better, but
-        // this is VP for now)
-        int p = user.getRewardPoints();
-        String newTier = "SILVER";
-
-        if (p >= 5000)
-            newTier = "DIAMOND";
-        else if (p >= 1000)
-            newTier = "GOLD";
-
-        user.setMembershipTier(newTier);
-        user.setMembershipTier(newTier);
-    }
-
-    @Transactional
-    public void redeemPoints(User user, int pointsToRedeem, Order order) {
-        if (pointsToRedeem <= 0)
-            return;
-
-        if (user.getRewardPoints() < pointsToRedeem) {
+    public void redeemPoints(User user, Integer points, com.example.be.entity.Order order) {
+        LoyaltyProgram lp = loyaltyRepository.findByUserId(user.getId()).orElseThrow();
+        if (lp.getPoints() < points) {
             throw new RuntimeException("Insufficient points");
         }
+        lp.setPoints(lp.getPoints() - points);
+        loyaltyRepository.save(lp);
 
-        // Deduct Points
-        user.setRewardPoints(user.getRewardPoints() - pointsToRedeem);
+        // Logic to apply discount to order is handled in OrderService before this
+    }
 
-        // Check Tier Downgrade? Usually we don't downgrade immediately, or tier is
-        // based on historical earning.
-        // For simplicity, we keep tier as is or recalculate. Let's keep as is.
+    public void processOrderCompletion(com.example.be.entity.Order order) {
+        if (order.getUser() != null) {
+            java.math.BigDecimal total = order.getFinalTotal();
+            if (total == null)
+                total = order.getSubtotal(); // Fallback
+            if (total != null) {
+                addPoints(order.getUser().getId(), total);
+            }
+        }
+    }
 
-        userRepository.save(user);
+    private void updateTier(LoyaltyProgram lp) {
+        if (lp.getPoints() >= 10000)
+            lp.setTierLevel("DIAMOND");
+        else if (lp.getPoints() >= 5000)
+            lp.setTierLevel("GOLD");
+        else if (lp.getPoints() >= 1000)
+            lp.setTierLevel("SILVER");
+        else
+            lp.setTierLevel("BRONZE");
+    }
 
-        // Create Log
-        LoyaltyLog log = LoyaltyLog.builder()
-                .user(user)
-                .order(order)
-                .points(-pointsToRedeem) // Negative for passing
-                .reason("Redeemed for Order #" + order.getId())
-                .build();
-        loyaltyLogRepository.save(log);
+    public LoyaltyProgram getLoyaltyInfo(Long userId) {
+        return loyaltyRepository.findByUserId(userId)
+                .orElse(LoyaltyProgram.builder()
+                        .points(0)
+                        .tierLevel("BRONZE")
+                        .build());
     }
 }

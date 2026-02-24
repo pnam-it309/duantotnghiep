@@ -6,6 +6,9 @@ import com.example.be.service.SizeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +20,16 @@ public class SizeServiceImpl implements SizeService {
     @Override
     public List<Size> getAllSizes() {
         return sizeRepository.findAll();
+    }
+
+    @Override
+    public Page<Size> getSizes(Pageable pageable) {
+        return sizeRepository.findAll(pageable);
+    }
+
+    @Override
+    public Page<Size> searchSizes(String keyword, Pageable pageable) {
+        return sizeRepository.searchSizes(keyword, pageable);
     }
 
     @Override

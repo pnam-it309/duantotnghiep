@@ -6,6 +6,8 @@ import com.example.be.repository.OrderItemRepository;
 import com.example.be.repository.OrderRepository;
 import com.example.be.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,8 +24,8 @@ public class OrderServiceImpl implements OrderService {
     private final com.example.be.service.LoyaltyService loyaltyService;
 
     @Override
-    public List<Order> getAllOrders() {
-        return orderRepository.findAll();
+    public Page<Order> getAllOrders(Pageable pageable) {
+        return orderRepository.findAll(pageable);
     }
 
     @Override
@@ -72,7 +74,7 @@ public class OrderServiceImpl implements OrderService {
         logStatusChange(savedOrder, "Order Created");
 
         // Handle Points Redemption
-        if (order.getPointsUsed() > 0 && order.getUser() != null) {
+        if (order.getPointsUsed() != null && order.getPointsUsed() > 0 && order.getUser() != null) {
             loyaltyService.redeemPoints(order.getUser(), order.getPointsUsed(), savedOrder);
             logStatusChange(savedOrder, "Redeemed " + order.getPointsUsed() + " points");
         }
@@ -120,5 +122,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public List<com.example.be.entity.OrderStatusHistory> getOrderHistory(Long orderId) {
         return orderStatusHistoryRepository.findByOrderIdOrderByChangedAtDesc(orderId);
+    }
+    @Override
+    public Page<Order> searchOrders(String keyword, String status, Pageable pageable) {
+        return orderRepository.searchOrders(keyword, status, pageable);
     }
 }

@@ -31,10 +31,19 @@ public class Order {
     @Column(name = "final_total")
     private BigDecimal finalTotal;
 
+    @Column(name = "shipping_address")
+    private String shippingAddress;
+
+    @Column(name = "payment_method")
+    private String paymentMethod; // COD, BANK_TRANSFER
+
+    @Column(name = "phone_number")
+    private String phoneNumber;
+
     private String status;
 
     @Column(name = "points_used")
-    private int pointsUsed;
+    private Integer pointsUsed;
 
     @Column(name = "points_discount")
     private BigDecimal pointsDiscount;
@@ -51,5 +60,11 @@ public class Order {
     @PrePersist
     protected void onCreate() {
         createdAt = java.time.LocalDateTime.now();
+        if (pointsUsed == null)
+            pointsUsed = 0;
+        if (pointsDiscount == null)
+            pointsDiscount = java.math.BigDecimal.ZERO;
+        if (discountTotal == null)
+            discountTotal = java.math.BigDecimal.ZERO;
     }
 }

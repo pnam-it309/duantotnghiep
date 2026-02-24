@@ -18,15 +18,29 @@ public class User {
     private String password;
     private String email;
 
+    @Column(name = "full_name")
+    private String fullName;
+
+    @Column(name = "phone_number")
+    private String phoneNumber;
+
+    private String address;
+
     @Column(name = "reward_points")
-    private int rewardPoints; // Total available points
+    private Integer rewardPoints; // Total available points
 
     @Column(name = "membership_tier")
     private String membershipTier; // SILVER, GOLD, DIAMOND
+
+    private String role; // ADMIN, USER
 
     @PrePersist
     protected void onPrePersist() {
         if (membershipTier == null)
             membershipTier = "SILVER";
+        if (role == null)
+            role = "USER";
+        if (rewardPoints == null)
+            rewardPoints = 0;
     }
 }
